@@ -1,0 +1,39 @@
+{
+  "name": "lastra-chat",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck",
+    "clean": "rm -rf .nuxt .output node_modules/.cache",
+    "clean:build": "rm -rf .nuxt .output"
+  },
+  "dependencies": {
+    "@google/genai": "^1.19.0",
+    "@iconify-json/lucide": "^1.2.67",
+    "@nuxt/content": "^3.7.0",
+    "@nuxt/ui": "^4.0.0-alpha.1",
+    "@nuxtjs/mdc": "^0.17.4",
+    "@vueuse/nuxt": "13.9.0",
+    "better-sqlite3": "^12.2.0",
+    "nuxt": "^4.1.0",
+    "vue": "^3.5.21",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.9.0",
+    "@types/node": "^24.3.1",
+    "eslint": "^9.35.0",
+    "typescript": "^5.9.2",
+    "vue-tsc": "^3.0.6"
+  },
+  "resolutions": {
+    "unimport": "4.1.1"
+  },
+  "packageManager": "pnpm@10.15.1"
+}
