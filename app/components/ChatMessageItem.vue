@@ -71,7 +71,7 @@ const exactTime = computed(() => {
           :class="[
             'px-3 py-2 rounded-lg text-sm break-words',
             isOwnMessage
-              ? 'bg-primary text-inverted'
+              ? 'bg-inverted text-inverted'
               : isAIMessage
                 ? 'bg-accented'
                 : 'bg-elevated',
