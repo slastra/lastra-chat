@@ -1,8 +1,7 @@
+import { getWebcamTestRooms } from '../../utils/globalStore'
+
 // Share active rooms from join.post.ts
-const activeRooms = global.webcamTestRooms || new Map<string, Set<string>>()
-if (!global.webcamTestRooms) {
-  global.webcamTestRooms = activeRooms
-}
+const activeRooms = getWebcamTestRooms()
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)

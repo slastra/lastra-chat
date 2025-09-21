@@ -1,5 +1,5 @@
 import { useUserMedia, useDevicesList } from '@vueuse/core'
-import type { TestSignalMessage } from '../../types/webrtc'
+import type { TestSignalMessage } from '../../shared/types/webrtc'
 
 export const useWebcamTest = () => {
   const testId = ref(Math.random().toString(36).substring(7))
@@ -158,7 +158,7 @@ export const useWebcamTest = () => {
 
       if (Array.isArray(messages)) {
         for (const msg of messages) {
-          await handleMessage(msg)
+          await handleMessage(msg as TestSignalMessage)
         }
       }
     } catch {
@@ -172,17 +172,19 @@ export const useWebcamTest = () => {
 
     switch (message.type) {
       case 'offer':
-        if (role.value === 'viewer') {
-          await handleOffer(message.data)
+        if (role.value === 'viewer' && message.data?.offer) {
+          await handleOffer(message.data.offer)
         }
         break
       case 'answer':
-        if (role.value === 'broadcaster') {
-          await handleAnswer(message.data)
+        if (role.value === 'broadcaster' && message.data?.answer) {
+          await handleAnswer(message.data.answer)
         }
         break
       case 'ice-candidate':
-        await handleIceCandidate(message.data)
+        if (message.data?.candidate) {
+          await handleIceCandidate(message.data.candidate)
+        }
         break
       case 'broadcast-start':
         addDebugLog(`${message.senderName} started broadcasting`, 'info')
@@ -212,7 +214,7 @@ export const useWebcamTest = () => {
           type: 'ice-candidate',
           roomId: roomId.value,
           senderId: testId.value,
-          data: event.candidate
+          data: { candidate: event.candidate }
         })
       }
     }
@@ -279,7 +281,7 @@ export const useWebcamTest = () => {
         roomId: roomId.value,
         senderId: testId.value,
         senderName: `User ${testId.value}`,
-        data: offer
+        data: { offer }
       })
 
       await sendMessage({
@@ -327,7 +329,7 @@ export const useWebcamTest = () => {
       type: 'answer',
       roomId: roomId.value,
       senderId: testId.value,
-      data: answer
+      data: { answer }
     })
 
     addDebugLog('Sent answer to broadcaster', 'success')
@@ -340,7 +342,7 @@ export const useWebcamTest = () => {
   }
 
   // Handle ICE candidate
-  const handleIceCandidate = async (candidate: RTCIceCandidate) => {
+  const handleIceCandidate = async (candidate: RTCIceCandidateInit) => {
     if (peerConnection.value && peerConnection.value.remoteDescription) {
       await peerConnection.value.addIceCandidate(candidate)
       addDebugLog(`Added ICE candidate`, 'info')

@@ -1,5 +1,5 @@
 import { useDisplayMedia } from '@vueuse/core'
-import type { ScreenShareMessage, SignalingMessage } from '../../types/webrtc'
+import type { ScreenShareMessage, SignalingMessage } from '../../shared/types/webrtc'
 
 interface ScreenSharePeer {
   userId: string
@@ -101,6 +101,7 @@ export const useScreenShare = () => {
         console.log(`[ScreenShare] Sending ICE candidate to ${targetUserName}`)
         sendSignalingMessage({
           type: 'screen-share-ice',
+          userId: clientId.value,
           targetUserId,
           candidate: event.candidate
         })

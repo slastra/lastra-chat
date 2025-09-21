@@ -1,8 +1,7 @@
+import { getScreenShareTestRooms } from '../../utils/globalStore'
+
 // Share active rooms from join.post.ts
-const activeRooms = global.screenShareTestRooms || new Map<string, Set<string>>()
-if (!global.screenShareTestRooms) {
-  global.screenShareTestRooms = activeRooms
-}
+const activeRooms = getScreenShareTestRooms()
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)

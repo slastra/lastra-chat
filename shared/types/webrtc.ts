@@ -1,15 +1,24 @@
 // WebRTC Signaling Message Types
 
-// Use proper WebRTC types from DOM lib
-type RTCSessionDescription = RTCSessionDescriptionInit
-type RTCIceCandidate = RTCIceCandidateInit
+// WebRTC type aliases for better compatibility
+export interface RTCSessionDescriptionType {
+  type: 'offer' | 'answer' | 'pranswer' | 'rollback'
+  sdp?: string
+}
+
+export interface RTCIceCandidateType {
+  candidate: string
+  sdpMLineIndex?: number | null
+  sdpMid?: string | null
+  usernameFragment?: string | null
+}
 
 // Screen share specific messages
 export interface ScreenShareOfferMessage {
   type: 'screen-share-offer'
   userId: string
   userName: string
-  offer: RTCSessionDescription
+  offer: RTCSessionDescriptionType
   targetUserId?: string
 }
 
@@ -17,14 +26,14 @@ export interface ScreenShareAnswerMessage {
   type: 'screen-share-answer'
   userId: string
   targetUserId: string
-  answer: RTCSessionDescription
+  answer: RTCSessionDescriptionType
 }
 
 export interface ScreenShareIceCandidateMessage {
   type: 'screen-share-ice-candidate'
   userId: string
   targetUserId?: string
-  candidate: RTCIceCandidate
+  candidate: RTCIceCandidateType
 }
 
 export interface ScreenShareStopMessage {
@@ -44,23 +53,34 @@ export type ScreenShareMessage
 export interface SignalingMessage {
   type: string
   userId: string
+  userName?: string
   targetUserId?: string
+  streamType?: 'webcam' | 'desktop'
+  offer?: RTCSessionDescriptionType
+  answer?: RTCSessionDescriptionType
+  candidate?: RTCIceCandidateType
+  mediaState?: {
+    webcam?: boolean
+    microphone?: boolean
+    screen?: boolean
+  }
   [key: string]: unknown // Allow additional properties
 }
 
 // Test environment specific messages
 export interface TestSignalData {
-  offer?: RTCSessionDescription
-  answer?: RTCSessionDescription
-  candidate?: RTCIceCandidate
+  offer?: RTCSessionDescriptionType
+  answer?: RTCSessionDescriptionType
+  candidate?: RTCIceCandidateType
   role?: string
   [key: string]: unknown
 }
 
 export interface TestSignalMessage {
-  type: 'offer' | 'answer' | 'ice-candidate' | 'share-start' | 'share-stop'
+  type: 'offer' | 'answer' | 'ice-candidate' | 'share-start' | 'share-stop' | 'broadcast-start' | 'broadcast-stop'
   roomId: string
   senderId: string
+  senderName?: string
   data?: TestSignalData
   timestamp?: number
 }

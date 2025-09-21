@@ -1,15 +1,15 @@
-// Global type declarations for server-side state management
+import type { StoredSignalMessage } from '../../shared/types/webrtc'
 
-import type { StoredSignalMessage } from './webrtc'
+interface SSEConnection {
+  send: (data: { event: string, data: string }) => void
+}
 
 declare global {
-  // Screen share test rooms and message queues
   var screenShareTestRooms: Map<string, Set<string>> | undefined
   var screenShareTestQueues: Map<string, StoredSignalMessage[]> | undefined
-
-  // Webcam test rooms and message queues
   var webcamTestRooms: Map<string, Set<string>> | undefined
   var webcamTestQueues: Map<string, StoredSignalMessage[]> | undefined
+  var sseConnections: Map<string, SSEConnection> | undefined
 }
 
 export {}

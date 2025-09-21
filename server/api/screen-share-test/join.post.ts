@@ -1,8 +1,7 @@
+import { getScreenShareTestRooms } from '../../utils/globalStore'
+
 // Share active rooms across endpoints using global
-const activeRooms = global.screenShareTestRooms || new Map<string, Set<string>>()
-if (!global.screenShareTestRooms) {
-  global.screenShareTestRooms = activeRooms
-}
+const activeRooms = getScreenShareTestRooms()
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)

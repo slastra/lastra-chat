@@ -17,6 +17,11 @@ export interface UserPresence {
   joinedAt: number
   isTyping: boolean
   lastActivity: number
+  mediaState?: {
+    webcam: boolean
+    microphone: boolean
+    screen: boolean
+  }
 }
 
 interface ConnectedClient {
@@ -31,6 +36,16 @@ const messages: ChatMessage[] = []
 const MAX_MESSAGE_HISTORY = 256 // Prevent memory leak
 const connectedClients = new Set<ConnectedClient>()
 const userPresence = new Map<string, UserPresence>()
+
+// Make userPresence globally available for media state updates
+global.userPresence = userPresence
+
+// Initialize global SSE connections map for signaling
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+if (!(global as any).sseConnections) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(global as any).sseConnections = new Map()
+}
 
 // Global bot state management
 const botStates = new Map<string, boolean>() // botName -> enabled
@@ -60,6 +75,9 @@ function startCleanupInterval() {
         deadClients.forEach((client) => {
           connectedClients.delete(client)
           userPresence.delete(client.userId)
+          // Remove from global SSE connections map
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(global as any).sseConnections.delete(client.userId)
         })
       }
 
@@ -102,6 +120,16 @@ export default defineEventHandler(async (event) => {
     initialDataSent: false
   }
   connectedClients.add(client)
+
+  // Add to global SSE connections map for signaling
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(global as any).sseConnections.set(userId, {
+    send: (data: { event: string, data: string }) => {
+      client.stream.push(data).catch((err) => {
+        console.error(`[SSE] Failed to send to ${userId}:`, err)
+      })
+    }
+  })
 
   // Start cleanup interval when first client connects
   if (connectedClients.size === 1) {
@@ -269,6 +297,10 @@ export default defineEventHandler(async (event) => {
 
     connectedClients.delete(client)
     userPresence.delete(userId)
+
+    // Remove from global SSE connections map
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(global as any).sseConnections.delete(userId)
 
     const leaveMessage: ChatMessage = {
       id: `msg-${Date.now()}-${Math.random()}`,

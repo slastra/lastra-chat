@@ -1,5 +1,5 @@
 import { useDisplayMedia } from '@vueuse/core'
-import type { TestSignalMessage } from '../../types/webrtc'
+import type { TestSignalMessage } from '../../shared/types/webrtc'
 
 interface _TestPeer {
   id: string
@@ -121,7 +121,7 @@ export const useScreenShareTest = () => {
 
       if (Array.isArray(messages)) {
         for (const msg of messages) {
-          await handleMessage(msg)
+          await handleMessage(msg as TestSignalMessage)
         }
       }
     } catch {
@@ -135,17 +135,19 @@ export const useScreenShareTest = () => {
 
     switch (message.type) {
       case 'offer':
-        if (role.value === 'viewer') {
-          await handleOffer(message.data)
+        if (role.value === 'viewer' && message.data?.offer) {
+          await handleOffer(message.data.offer)
         }
         break
       case 'answer':
-        if (role.value === 'sharer') {
-          await handleAnswer(message.data)
+        if (role.value === 'sharer' && message.data?.answer) {
+          await handleAnswer(message.data.answer)
         }
         break
       case 'ice-candidate':
-        await handleIceCandidate(message.data)
+        if (message.data?.candidate) {
+          await handleIceCandidate(message.data.candidate)
+        }
         break
       case 'share-start':
         addDebugLog('Remote user started sharing', 'info')
@@ -176,7 +178,7 @@ export const useScreenShareTest = () => {
           type: 'ice-candidate',
           roomId: roomId.value,
           senderId: testId.value,
-          data: event.candidate
+          data: { candidate: event.candidate }
         })
       }
     }
@@ -265,7 +267,7 @@ export const useScreenShareTest = () => {
         type: 'offer',
         roomId: roomId.value,
         senderId: testId.value,
-        data: offer
+        data: { offer }
       })
 
       await sendMessage({
@@ -319,7 +321,7 @@ export const useScreenShareTest = () => {
       type: 'answer',
       roomId: roomId.value,
       senderId: testId.value,
-      data: answer
+      data: { answer }
     })
 
     addDebugLog('Sent answer to sharer', 'success')
@@ -332,10 +334,10 @@ export const useScreenShareTest = () => {
   }
 
   // Handle ICE candidate
-  const handleIceCandidate = async (candidate: RTCIceCandidate) => {
+  const handleIceCandidate = async (candidate: RTCIceCandidateInit) => {
     if (peerConnection.value && peerConnection.value.remoteDescription) {
       await peerConnection.value.addIceCandidate(candidate)
-      addDebugLog(`Added ICE candidate: ${candidate.type}`, 'info')
+      addDebugLog(`Added ICE candidate`, 'info')
     }
   }
 

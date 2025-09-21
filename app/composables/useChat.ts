@@ -1,7 +1,9 @@
-export const useChat = () => {
+import type { SignalingMessage } from '../../shared/types/webrtc'
+
+export const useChat = (mediaStreamHandler?: (signal: SignalingMessage) => void, checkMediaConnections?: () => void) => {
   const user = useUser()
   const state = useChatState()
-  const sse = useChatSSE()
+  const sse = useChatSSE(mediaStreamHandler, checkMediaConnections)
   const actions = useChatActions()
 
   const initialize = () => {

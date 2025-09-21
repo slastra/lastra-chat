@@ -1,11 +1,8 @@
-// @ts-ignore - Global types are declared in types/global.d.ts
-import type { StoredSignalMessage } from '../../../types/webrtc'
+import type { StoredSignalMessage } from '../../../shared/types/webrtc'
+import { getScreenShareTestQueues } from '../../utils/globalStore'
 
 // Share the message queue from signal.post.ts
-const messageQueues = global.screenShareTestQueues || new Map<string, StoredSignalMessage[]>()
-if (!global.screenShareTestQueues) {
-  global.screenShareTestQueues = messageQueues
-}
+const messageQueues = getScreenShareTestQueues()
 
 const clientLastSeen = new Map<string, number>()
 
@@ -27,13 +24,13 @@ export default defineEventHandler(async (event) => {
   const lastSeen = clientLastSeen.get(`${roomId}:${clientId}`) || 0
 
   // Filter messages that are new for this client (and not from this client)
-  const newMessages = messages.filter(msg =>
+  const newMessages = messages.filter((msg: StoredSignalMessage) =>
     msg.timestamp > lastSeen && msg.senderId !== clientId
   )
 
   // Update last seen timestamp
   if (messages.length > 0) {
-    const latestTimestamp = Math.max(...messages.map(m => m.timestamp))
+    const latestTimestamp = Math.max(...messages.map((m: StoredSignalMessage) => m.timestamp))
     clientLastSeen.set(`${roomId}:${clientId}`, latestTimestamp)
   }
 

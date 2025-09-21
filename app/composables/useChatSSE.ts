@@ -1,6 +1,7 @@
 import { useEventSource } from '@vueuse/core'
+import type { SignalingMessage } from '../../shared/types/webrtc'
 
-export const useChatSSE = () => {
+export const useChatSSE = (mediaStreamHandler?: (signal: SignalingMessage) => void, checkMediaConnections?: () => void) => {
   const { userName, clientId } = useUser()
   const {
     setMessages,
@@ -67,6 +68,10 @@ export const useChatSSE = () => {
   const handleUserList = (data: string) => {
     try {
       const users = JSON.parse(data)
+      console.log('[SSE] Received user list update:', users.map((u: { userName: string, mediaState?: { webcam: boolean, microphone: boolean, screen: boolean } }) => ({
+        name: u.userName,
+        mediaState: u.mediaState
+      })))
 
       // Check for user join/leave events
       if (hasReceivedInitialData.value) {
@@ -93,6 +98,14 @@ export const useChatSSE = () => {
       }
 
       setOnlineUsers(users)
+
+      // After updating users, check if we need to connect to any media streams
+      if (checkMediaConnections) {
+        setTimeout(() => {
+          console.log('[SSE] Checking for media connections after user list update')
+          checkMediaConnections()
+        }, 100) // Small delay to ensure state is updated
+      }
     } catch (error) {
       console.error('[SSE] Failed to parse user list:', error)
     }
@@ -221,6 +234,26 @@ export const useChatSSE = () => {
     }
   }
 
+  const handleWebRTCSignal = (data: string) => {
+    try {
+      const signal = JSON.parse(data) as SignalingMessage
+      console.log(`[SSE] WebRTC signal: ${signal.type} from ${signal.userId}/${signal.userName}`)
+
+      if (signal.type === 'media-state') {
+        console.log(`[SSE] Media state update:`, signal.mediaState)
+      }
+
+      // Use the passed in handler if available
+      if (mediaStreamHandler) {
+        mediaStreamHandler(signal)
+      } else {
+        console.warn('[SSE] No media stream handler provided for WebRTC signal')
+      }
+    } catch (error) {
+      console.error('[SSE] Failed to parse WebRTC signal data:', error)
+    }
+  }
+
   // Create event handlers map
   const eventHandlers: Record<string, (data: string) => void> = {
     'history': handleHistory,
@@ -235,17 +268,17 @@ export const useChatSSE = () => {
     'ping': () => console.log('[SSE] Received ping'),
     'clear': handleClear,
     'bot-state': handleBotState,
-    'bot-toggle': handleBotToggle
+    'bot-toggle': handleBotToggle,
+    'webrtc-signal': handleWebRTCSignal
   }
 
   // Initialize useEventSource with auto-reconnection
   const {
     status,
-    data: eventData,
-    event: eventType,
     error,
     close,
-    open
+    open,
+    eventSource
   } = useEventSource(sseUrl, Object.keys(eventHandlers), {
     immediate: false, // Don't connect immediately, wait for explicit connect()
     autoReconnect: {
@@ -258,22 +291,36 @@ export const useChatSSE = () => {
     }
   })
 
-  // Watch for incoming events - combine data and event type in a single watcher
-  watch([eventData, eventType], ([data, type]) => {
-    if (!data || !type) return
+  // Store event listener functions for cleanup
+  const eventListeners = new Map<string, (event: MessageEvent) => void>()
 
-    console.log(`[SSE] Event: ${type}`)
+  // Add event listeners directly to EventSource when available
+  watchEffect((onCleanup) => {
+    const es = eventSource.value
+    if (!es) return
 
-    // Call the appropriate handler
-    if (eventHandlers[type]) {
-      try {
-        eventHandlers[type](data)
-      } catch (error) {
-        console.error(`[SSE] Error handling ${type} event:`, error)
+    // Create and store event listeners
+    Object.entries(eventHandlers).forEach(([eventName, handler]) => {
+      const listener = (event: MessageEvent) => {
+        console.log(`[SSE] Event: ${eventName}`)
+        try {
+          handler(event.data)
+        } catch (error) {
+          console.error(`[SSE] Error handling ${eventName} event:`, error)
+        }
       }
-    } else if (type !== 'open') { // 'open' is handled by status watcher
-      console.log(`[SSE] Unknown event type: ${type}`)
-    }
+
+      es.addEventListener(eventName, listener)
+      eventListeners.set(eventName, listener)
+    })
+
+    // Cleanup function to remove all listeners
+    onCleanup(() => {
+      eventListeners.forEach((listener, eventName) => {
+        es.removeEventListener(eventName, listener)
+      })
+      eventListeners.clear()
+    })
   })
 
   // Watch connection status changes
@@ -302,10 +349,10 @@ export const useChatSSE = () => {
     }
   })
 
-  // Watch for errors
-  watch(error, (newError) => {
-    if (newError) {
-      console.error('[SSE] Connection error:', newError)
+  // Use watchEffect for error handling
+  watchEffect(() => {
+    if (error.value) {
+      console.error('[SSE] Connection error:', error.value)
 
       if (!hasReceivedInitialData.value) {
         console.warn('[SSE] Never received initial data, will retry on reconnect')

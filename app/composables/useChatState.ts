@@ -14,6 +14,17 @@ export interface UserPresence {
   joinedAt: number
   isTyping: boolean
   lastActivity: number
+  mediaState?: {
+    webcam: boolean
+    microphone: boolean
+    screen: boolean
+  }
+}
+
+export interface UserMediaStream {
+  userId: string
+  stream: MediaStream
+  type: 'webcam' | 'desktop'
 }
 
 const MAX_MESSAGE_HISTORY = 256 // Match server limit
@@ -32,6 +43,7 @@ export const useChatState = () => {
   const typingUsers = useState<Set<string>>('typingUsers', () => new Set())
   const connectionStatus = useState<'connecting' | 'connected' | 'disconnected'>('connectionStatus', () => 'connecting')
   const pendingMessages = useState<ChatMessage[]>('pendingMessages', () => [])
+  const userMediaStreams = useState<Map<string, UserMediaStream>>('userMediaStreams', () => new Map())
 
   const addMessage = (message: ChatMessage) => {
     // Skip if message already exists
@@ -158,12 +170,56 @@ export const useChatState = () => {
     messageMap.value.clear()
   }
 
+  const addUserStream = (userId: string, stream: MediaStream, type: 'webcam' | 'desktop') => {
+    // Remove existing stream of the same type
+    const existingStream = Array.from(userMediaStreams.value.values())
+      .find(s => s.userId === userId && s.type === type)
+    if (existingStream) {
+      userMediaStreams.value.delete(`${userId}-${type}`)
+    }
+
+    userMediaStreams.value.set(`${userId}-${type}`, {
+      userId,
+      stream,
+      type
+    })
+  }
+
+  const removeUserStream = (userId: string, type?: 'webcam' | 'desktop') => {
+    if (type) {
+      userMediaStreams.value.delete(`${userId}-${type}`)
+    } else {
+      // Remove all streams for user
+      Array.from(userMediaStreams.value.keys())
+        .filter(key => key.startsWith(`${userId}-`))
+        .forEach(key => userMediaStreams.value.delete(key))
+    }
+  }
+
+  const getUserStreams = (userId: string) => {
+    return Array.from(userMediaStreams.value.values())
+      .filter(s => s.userId === userId)
+  }
+
+  const updateUserMediaState = (userId: string, mediaState: Partial<NonNullable<UserPresence['mediaState']>>) => {
+    const user = onlineUsers.value.find(u => u.userId === userId)
+    if (user) {
+      const currentMediaState = user.mediaState || { webcam: false, microphone: false, screen: false }
+      user.mediaState = {
+        webcam: mediaState.webcam !== undefined ? mediaState.webcam : currentMediaState.webcam,
+        microphone: mediaState.microphone !== undefined ? mediaState.microphone : currentMediaState.microphone,
+        screen: mediaState.screen !== undefined ? mediaState.screen : currentMediaState.screen
+      }
+    }
+  }
+
   return {
     messages,
     onlineUsers,
     typingUsers,
     connectionStatus,
     pendingMessages,
+    userMediaStreams,
     addMessage,
     updateMessage,
     setMessages,
@@ -173,6 +229,10 @@ export const useChatState = () => {
     setConnectionStatus,
     addPendingMessage,
     removePendingMessage,
-    clearMessages
+    clearMessages,
+    addUserStream,
+    removeUserStream,
+    getUserStreams,
+    updateUserMediaState
   }
 }

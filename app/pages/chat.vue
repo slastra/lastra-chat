@@ -1,6 +1,7 @@
 <script setup lang="ts">
-const chat = useChat()
 const { loadBots } = useBots()
+const mediaStream = useMediaStream()
+const chat = useChat(mediaStream.handleSignalingMessage, mediaStream.checkAndConnectToExistingMedia)
 const isReady = ref(false)
 
 onMounted(async () => {
@@ -12,6 +13,24 @@ onMounted(async () => {
 onUnmounted(() => {
   chat.cleanup()
 })
+
+// Handle media control events
+const handleWebcamToggle = (_enabled: boolean) => {
+  mediaStream.toggleWebcam()
+}
+
+const handleMicToggle = (_enabled: boolean) => {
+  mediaStream.toggleMic()
+}
+
+const handleScreenToggle = (_enabled: boolean) => {
+  mediaStream.toggleScreen()
+}
+
+const handleDeviceChange = (type: 'video' | 'audio', deviceId: string) => {
+  // Handle device change if needed
+  console.log(`Device changed: ${type} -> ${deviceId}`)
+}
 </script>
 
 <template>
@@ -43,9 +62,17 @@ onUnmounted(() => {
 
       <template #footer>
         <div class="w-full p-4">
-          <div class="flex items-center gap-2 text-sm">
-            <UIcon name="i-lucide-user" class="w-4 h-4" />
-            <span class="font-medium">{{ chat.userName.value }}</span>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-sm">
+              <UIcon name="i-lucide-user" class="w-4 h-4" />
+              <span class="font-medium">{{ chat.userName.value }}</span>
+            </div>
+            <MediaControls
+              @webcam-toggle="handleWebcamToggle"
+              @mic-toggle="handleMicToggle"
+              @screen-toggle="handleScreenToggle"
+              @device-change="handleDeviceChange"
+            />
           </div>
         </div>
       </template>
