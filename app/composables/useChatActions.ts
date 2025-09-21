@@ -1,6 +1,7 @@
 export const useChatActions = () => {
   const { userName, clientId } = useUser()
   const { addMessage, updateMessage } = useChatState()
+  const { playSound } = useSoundManager()
   const toast = useToast()
 
   let typingTimeout: NodeJS.Timeout | null = null
@@ -34,9 +35,15 @@ export const useChatActions = () => {
       })
 
       updateMessage(tempId, { status: 'sent', id: response.messageId })
+
+      // Play sound when message is sent successfully
+      playSound('messageSent')
     } catch (error) {
       console.error('Failed to send message:', error)
       updateMessage(tempId, { status: 'failed' })
+
+      // Play error sound when message fails to send
+      playSound('error')
 
       toast.add({
         title: 'Failed to send message',

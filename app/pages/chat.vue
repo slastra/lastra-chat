@@ -60,6 +60,21 @@ onUnmounted(() => {
                 {{ chat.connectionStatus.value }}
               </UBadge>
 
+              <!-- Sound Settings Popover -->
+              <UPopover>
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  icon="i-lucide-volume-2"
+                />
+
+                <template #content>
+                  <div class="p-4 w-96">
+                    <SoundSettings />
+                  </div>
+                </template>
+              </UPopover>
+
               <UButton
                 color="neutral"
                 variant="ghost"
@@ -80,6 +95,8 @@ onUnmounted(() => {
         </div>
       </template>
     </UDashboardPanel>
+
+    <!-- Audio Enable Prompt -->
   </UDashboardGroup>
   <div v-else class="flex items-center justify-center h-screen">
     <UCard>

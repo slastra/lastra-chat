@@ -4,6 +4,7 @@ const { typingUsers, onlineUsers, connectionStatus } = useChatState()
 const { clientId } = useUser()
 const { detectBotMention } = useBots()
 const { isCommand, executeCommand, getCommandSuggestions } = useSlashCommands()
+const { canPlayAudio, enableAudio } = useSoundManager()
 
 const input = ref('')
 const isTyping = ref(false)
@@ -22,6 +23,11 @@ const typingUsersList = computed(() => {
 })
 
 const handleInput = () => {
+  // Try to enable audio on first user interaction
+  if (!canPlayAudio.value) {
+    enableAudio().catch(() => {})
+  }
+
   if (!isTyping.value && input.value.trim()) {
     isTyping.value = true
     sendTypingIndicator(true)

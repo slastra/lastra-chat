@@ -90,7 +90,7 @@ const exactTime = computed(() => {
             '[&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:mt-2 [&_h3]:mb-1'
           ]"
         >
-          <MDC :value="message.content" tag="div" />
+          <MDC :value="message.content" />
         </div>
       </div>
     </div>
