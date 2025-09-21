@@ -18,6 +18,7 @@ export interface CommandContext {
 export const useSlashCommands = () => {
   const { addMessage, clearMessages } = useChatState()
   const { userName, clientId } = useUser()
+  const { clearChat } = useChatActions()
   const toast = useToast()
 
   // Command registry
@@ -29,21 +30,10 @@ export const useSlashCommands = () => {
     description: 'Clear chat history for all participants',
     usage: '/clear',
     type: 'server',
-    handler: async (args, context) => {
+    handler: async (_args, _context) => {
       try {
-        // Call server endpoint to clear chat for everyone
-        await $fetch('/api/chat-clear', {
-          method: 'POST',
-          body: {
-            userName: context.userName.value
-          }
-        })
-
-        toast.add({
-          title: 'Chat Cleared',
-          description: 'Chat history cleared for all participants',
-          color: 'success'
-        })
+        // Use WebSocket to clear chat for everyone
+        await clearChat()
       } catch (error) {
         console.error('Failed to clear chat:', error)
         toast.add({

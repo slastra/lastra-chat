@@ -1,16 +1,41 @@
 <script setup lang="ts">
+import type { SignalingMessage } from '../../shared/types/webrtc'
+
 const { loadBots } = useBots()
-const mediaStream = useMediaStream()
-const chat = useChat(mediaStream.handleSignalingMessage, mediaStream.checkAndConnectToExistingMedia)
+// Create a single WebSocket instance to share
+const ws = useWebSocketChat()
+const mediaStream = useMediaStream(ws)
+const chat = useChat(ws)
 const isReady = ref(false)
+
+// Create handler functions to maintain reference
+const handleWebRTCSignal = (data: unknown) => {
+  mediaStream.handleSignalingMessage(data as SignalingMessage)
+}
+
+const handleUserList = () => {
+  // Check for media connections after user list updates
+  setTimeout(() => {
+    mediaStream.checkAndConnectToExistingMedia()
+  }, 100)
+}
 
 onMounted(async () => {
   // Load bots first
   await loadBots()
   isReady.value = chat.initialize()
+
+  // Register WebRTC handlers with the mediaStream
+  if (isReady.value) {
+    ws.on('webrtc-signal', handleWebRTCSignal)
+    ws.on('user-list', handleUserList)
+  }
 })
 
 onUnmounted(() => {
+  // Clean up handlers
+  ws.off('webrtc-signal', handleWebRTCSignal)
+  ws.off('user-list', handleUserList)
   chat.cleanup()
 })
 
@@ -27,9 +52,8 @@ const handleScreenToggle = (_enabled: boolean) => {
   mediaStream.toggleScreen()
 }
 
-const handleDeviceChange = (type: 'video' | 'audio', deviceId: string) => {
+const handleDeviceChange = (_type: 'video' | 'audio', _deviceId: string) => {
   // Handle device change if needed
-  console.log(`Device changed: ${type} -> ${deviceId}`)
 }
 </script>
 

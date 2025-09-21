@@ -4,7 +4,7 @@ export interface ChatMessage {
   userName: string
   content: string
   timestamp: number
-  type: 'user' | 'system' | 'ai'
+  type: 'user' | 'system' | 'ai' | 'bot'
   status?: 'sending' | 'sent' | 'failed' | 'streaming'
 }
 
@@ -171,10 +171,13 @@ export const useChatState = () => {
   }
 
   const addUserStream = (userId: string, stream: MediaStream, type: 'webcam' | 'desktop') => {
+    console.log(`[ChatState] Adding ${type} stream for user ${userId}`)
+
     // Remove existing stream of the same type
     const existingStream = Array.from(userMediaStreams.value.values())
       .find(s => s.userId === userId && s.type === type)
     if (existingStream) {
+      console.log(`[ChatState] Removing existing ${type} stream for user ${userId}`)
       userMediaStreams.value.delete(`${userId}-${type}`)
     }
 
@@ -183,6 +186,9 @@ export const useChatState = () => {
       stream,
       type
     })
+
+    console.log(`[ChatState] Stream added. Total streams: ${userMediaStreams.value.size}`)
+    console.log(`[ChatState] Stream has ${stream.getVideoTracks().length} video tracks and ${stream.getAudioTracks().length} audio tracks`)
   }
 
   const removeUserStream = (userId: string, type?: 'webcam' | 'desktop') => {
@@ -197,8 +203,14 @@ export const useChatState = () => {
   }
 
   const getUserStreams = (userId: string) => {
-    return Array.from(userMediaStreams.value.values())
+    const streams = Array.from(userMediaStreams.value.values())
       .filter(s => s.userId === userId)
+
+    if (streams.length > 0) {
+      console.log(`[ChatState] Getting ${streams.length} stream(s) for user ${userId}:`, streams.map(s => s.type).join(', '))
+    }
+
+    return streams
   }
 
   const updateUserMediaState = (userId: string, mediaState: Partial<NonNullable<UserPresence['mediaState']>>) => {

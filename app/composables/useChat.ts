@@ -1,10 +1,8 @@
-import type { SignalingMessage } from '../../shared/types/webrtc'
-
-export const useChat = (mediaStreamHandler?: (signal: SignalingMessage) => void, checkMediaConnections?: () => void) => {
+export const useChat = (ws?: ReturnType<typeof useWebSocketChat>) => {
   const user = useUser()
   const state = useChatState()
-  const sse = useChatSSE(mediaStreamHandler, checkMediaConnections)
-  const actions = useChatActions()
+  const websocket = ws || useWebSocketChat()
+  const actions = useChatActions(websocket)
 
   const initialize = () => {
     user.initUser()
@@ -14,19 +12,19 @@ export const useChat = (mediaStreamHandler?: (signal: SignalingMessage) => void,
       return false
     }
 
-    sse.connect()
+    websocket.connect()
     return true
   }
 
   const cleanup = () => {
-    sse.disconnect()
+    websocket.disconnect()
     state.clearMessages()
   }
 
   return {
     ...user,
     ...state,
-    ...sse,
+    ...websocket,
     ...actions,
     initialize,
     cleanup
