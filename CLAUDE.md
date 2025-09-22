@@ -112,6 +112,16 @@ When implementing UI features, always:
 - Uses HMAC-SHA1 authentication with static auth secret
 - Test pages available at `/turn-test`, `/display-test`, `/webcam-test`
 
+### WebRTC Connection Architecture
+- Uses directional connection IDs: `localUserId-to-remoteUserId-streamType`
+- Supports bidirectional streaming (users can both send and receive simultaneously)
+- **Critical**: When handling offers in response to stream requests:
+  - The requester is always the `receiver` role (they requested the stream)
+  - This applies even if they have a local stream to send back
+  - Incorrect role assignment prevents proper bidirectional streaming
+- Connection states: idle, requesting, creating, offering, answering, connected, failed, closed
+- Separate connections for webcam and desktop streams
+
 ### Server-Side Global State
 Server API endpoints use global variables for state management:
 ```typescript

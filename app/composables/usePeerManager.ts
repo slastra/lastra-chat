@@ -239,20 +239,22 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
 
   // Request a stream from a remote user
   const requestStream = async (remoteUserId: string, streamType: StreamType): Promise<void> => {
-    const id = getConnectionId(remoteUserId, streamType)
-    const state = getConnectionState(remoteUserId, streamType)
+    // We're requesting THEM to send to US, so use reverse ID for the incoming connection
+    const id = getReverseConnectionId(remoteUserId, streamType)
+
+    // Check if incoming connection already exists
+    const conn = connections.value.get(id)
 
     // Check if we can request
-    if (state !== ConnectionState.IDLE && state !== ConnectionState.FAILED && state !== ConnectionState.CLOSED) {
+    if (conn && conn.state !== ConnectionState.IDLE && conn.state !== ConnectionState.FAILED && conn.state !== ConnectionState.CLOSED) {
       return
     }
 
     // Update state to prevent duplicate requests
-    const conn = connections.value.get(id)
     if (conn) {
       updateConnectionState(id, ConnectionState.REQUESTING)
     } else {
-      // Create placeholder connection to track state
+      // Create placeholder for INCOMING connection
       const placeholder: PeerConnection = {
         id,
         localUserId: clientId.value,
@@ -344,52 +346,77 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
     message: SignalingMessage,
     localStream?: MediaStream
   ): Promise<void> => {
-    if (!message.offer || !message.streamType) return
+    console.log(`[PeerManager] handleOffer: ENTRY - Received offer from ${message.userId} for ${message.streamType}`)
+
+    if (!message.offer || !message.streamType) {
+      console.log(`[PeerManager] handleOffer: Missing offer or streamType, returning`)
+      return
+    }
+
+    // When receiving an offer, it's for THEIR connection to US (reverse ID)
+    const reverseId = getReverseConnectionId(message.userId, message.streamType)
+    console.log(`[PeerManager] handleOffer: Reverse ID: ${reverseId}`)
+    console.log(`[PeerManager] handleOffer: We have local stream: ${!!localStream}`)
 
     // Check if this is a response to our stream request
-    const ourRequestId = getConnectionId(message.userId, message.streamType)
-    const existingRequest = connections.value.get(ourRequestId)
+    const existingRequest = connections.value.get(reverseId)
+    console.log(`[PeerManager] handleOffer: Existing connection found: ${!!existingRequest}`)
+    if (existingRequest) {
+      console.log(`[PeerManager] handleOffer: Existing connection state: ${existingRequest.state}`)
+      console.log(`[PeerManager] handleOffer: Existing connection role: ${existingRequest.role}`)
+    }
 
     let conn: PeerConnection
-    let id: string
+    const id: string = reverseId
 
     if (existingRequest && existingRequest.state === ConnectionState.REQUESTING) {
-      // This is a response to our request - use our existing connection
-      id = ourRequestId
+      // This is a response to our request - use the placeholder connection
+      console.log(`[PeerManager] handleOffer: BRANCH 1 - Response to our request, replacing placeholder`)
       conn = existingRequest
 
-      // Update the placeholder to have the actual role and connection
-      const role = localStream ? 'sender' : 'receiver'
+      // We requested their stream, so we're the receiver
+      // Even if we have a local stream to send back (for bidirectional communication)
+      const role = 'receiver'
+      console.log(`[PeerManager] handleOffer: Creating real connection with role: ${role} (we requested their stream)`)
 
       // Delete placeholder and create real connection with same ID
       connections.value.delete(id)
       conn = await createConnection(message.userId, message.userName || 'Unknown', message.streamType, role, id)
+      console.log(`[PeerManager] handleOffer: Real connection created successfully`)
     } else {
-      // This is an unsolicited offer - create new connection with reverse ID
-      const reverseId = getReverseConnectionId(message.userId, message.streamType)
+      console.log(`[PeerManager] handleOffer: BRANCH 2 - Not a response to request`)
 
-      // Check if we already have this connection
-      const existingConn = connections.value.get(reverseId)
-      if (existingConn && existingConn.state !== ConnectionState.CLOSED && existingConn.state !== ConnectionState.FAILED) {
+      // This is an unsolicited offer - check if connection already exists
+      if (existingRequest && existingRequest.state !== ConnectionState.CLOSED && existingRequest.state !== ConnectionState.FAILED) {
+        console.log(`[PeerManager] handleOffer: ERROR - Connection ${id} already exists in state ${existingRequest.state}, IGNORING OFFER`)
         return
       }
 
       // Create new connection
       const role = localStream ? 'sender' : 'receiver'
-      conn = await createConnection(message.userId, message.userName || 'Unknown', message.streamType, role, reverseId)
-      id = reverseId
+      console.log(`[PeerManager] handleOffer: Creating new connection for unsolicited offer, role: ${role}`)
+      conn = await createConnection(message.userId, message.userName || 'Unknown', message.streamType, role, id)
+      console.log(`[PeerManager] handleOffer: New connection created successfully`)
     }
 
-    if (!conn) return
+    if (!conn) {
+      console.log(`[PeerManager] handleOffer: ERROR - Failed to create connection, returning`)
+      return
+    }
 
+    console.log(`[PeerManager] handleOffer: Updating state to ANSWERING`)
     updateConnectionState(id, ConnectionState.ANSWERING)
 
     try {
       // If we have a local stream (we're also broadcasting), add tracks
       if (localStream) {
+        const trackCount = localStream.getTracks().length
+        console.log(`[PeerManager] handleOffer: Adding ${trackCount} local tracks to send back`)
         localStream.getTracks().forEach((track) => {
           conn!.connection.addTrack(track, localStream)
         })
+      } else {
+        console.log(`[PeerManager] handleOffer: No local stream, receiving only`)
       }
 
       // Set remote description and create answer
@@ -400,6 +427,7 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
       // Process any pending ICE candidates
       const pending = pendingIceCandidates.value.get(id)
       if (pending && pending.length > 0) {
+        console.log(`[PeerManager] handleOffer: Processing ${pending.length} pending ICE candidates`)
         for (const candidate of pending) {
           try {
             await conn.connection.addIceCandidate(candidate)
@@ -410,6 +438,7 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
         pendingIceCandidates.value.delete(id)
       }
 
+      console.log(`[PeerManager] handleOffer: Sending answer to ${message.userId}`)
       options.sendSignal?.({
         type: 'answer',
         targetUserId: message.userId,
@@ -419,8 +448,9 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
           sdp: answer.sdp
         }
       })
+      console.log(`[PeerManager] handleOffer: Answer sent successfully`)
     } catch (error) {
-      console.error(`[PeerManager] Failed to handle offer for ${id}:`, error)
+      console.error(`[PeerManager] handleOffer: Failed to handle offer for ${id}:`, error)
       updateConnectionState(id, ConnectionState.FAILED)
     }
   }
@@ -461,9 +491,12 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
 
     // Mark this answer as being processed
     pendingAnswers.value.add(id)
+    console.log(`[PeerManager] handleAnswer: Processing answer for ${id}`)
 
     try {
+      console.log(`[PeerManager] handleAnswer: Setting remote description for ${id}`)
       await conn.connection.setRemoteDescription(new RTCSessionDescription(message.answer))
+      console.log(`[PeerManager] handleAnswer: Remote description set successfully for ${id}`)
 
       // Update state to CONNECTED after successfully applying answer
       updateConnectionState(id, ConnectionState.CONNECTED)
@@ -471,6 +504,7 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
       // Process any pending ICE candidates now that remote description is set
       const pending = pendingIceCandidates.value.get(id)
       if (pending && pending.length > 0) {
+        console.log(`[PeerManager] handleAnswer: Processing ${pending.length} pending ICE candidates for ${id}`)
         for (const candidate of pending) {
           try {
             await conn.connection.addIceCandidate(candidate)
@@ -487,6 +521,7 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
     } finally {
       // Always remove from pending set
       pendingAnswers.value.delete(id)
+      console.log(`[PeerManager] handleAnswer: Finished processing answer for ${id}`)
     }
   }
 

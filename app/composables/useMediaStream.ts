@@ -181,8 +181,11 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
       return
     }
 
+    console.log(`[MediaStream] Broadcasting ${streamType} to ${onlineUsers.value.length - 1} users`)
+
     for (const user of onlineUsers.value) {
       if (user.userId !== clientId.value) {
+        console.log(`[MediaStream] Creating offer to send ${streamType} to ${user.userId}`)
         await peerManager.createOffer(user.userId, user.userName, streamType, stream)
       }
     }
@@ -190,8 +193,11 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
 
   // Handle incoming signaling messages
   const handleSignalingMessage = async (message: SignalingMessage) => {
+    console.log(`[MediaStream] Received signaling message: type=${message.type}, from=${message.userId}, streamType=${message.streamType}`)
+
     switch (message.type) {
       case 'offer': {
+        console.log(`[MediaStream] Processing offer from ${message.userId} for ${message.streamType}`)
         // Determine if we should send our stream back
         const streamType = message.streamType as StreamType
         const localStream = streamType === 'webcam' ? localWebcamStream.value : localDesktopStream.value
@@ -200,6 +206,7 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
       }
 
       case 'answer':
+        console.log(`[MediaStream] Processing answer from ${message.userId} for ${message.streamType}`)
         await peerManager.handleAnswer(message)
         break
 
@@ -219,33 +226,46 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
 
   // Handle media state updates
   const handleMediaState = async (message: SignalingMessage) => {
+    console.log(`[MediaStream] handleMediaState from ${message.userId}:`, message.mediaState)
+
     if (message.mediaState) {
       updateUserMediaState(message.userId, message.mediaState)
 
       // Don't process our own media state updates
       if (message.userId === clientId.value) {
+        console.log('[MediaStream] Ignoring our own media state update')
         return
       }
 
       // If user turned off media, clean up connections
       if (message.mediaState.webcam === false) {
+        console.log(`[MediaStream] User ${message.userId} turned off webcam, closing connection`)
         await peerManager.closeConnection(message.userId, 'webcam')
       }
       if (message.mediaState.screen === false) {
+        console.log(`[MediaStream] User ${message.userId} turned off screen, closing connection`)
         await peerManager.closeConnection(message.userId, 'desktop')
       }
 
       // If user turned on media, request their stream (check THEIR connection to us)
       if (message.mediaState.webcam) {
         const incomingState = peerManager.getReverseConnectionState(message.userId, 'webcam')
+        console.log(`[MediaStream] User ${message.userId} has webcam on, reverse connection state: ${incomingState}`)
         if (incomingState === 'idle' || incomingState === 'failed' || incomingState === 'closed') {
+          console.log(`[MediaStream] Requesting webcam stream from ${message.userId}`)
           await peerManager.requestStream(message.userId, 'webcam')
+        } else {
+          console.log(`[MediaStream] Not requesting webcam from ${message.userId}, already in state: ${incomingState}`)
         }
       }
       if (message.mediaState.screen) {
         const incomingState = peerManager.getReverseConnectionState(message.userId, 'desktop')
+        console.log(`[MediaStream] User ${message.userId} has screen on, reverse connection state: ${incomingState}`)
         if (incomingState === 'idle' || incomingState === 'failed' || incomingState === 'closed') {
+          console.log(`[MediaStream] Requesting screen stream from ${message.userId}`)
           await peerManager.requestStream(message.userId, 'desktop')
+        } else {
+          console.log(`[MediaStream] Not requesting screen from ${message.userId}, already in state: ${incomingState}`)
         }
       }
     }
@@ -258,11 +278,18 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
     const streamType = message.streamType as StreamType
     const areWeBroadcasting = streamType === 'webcam' ? webcamEnabled.value : screenEnabled.value
 
+    console.log(`[MediaStream] Stream request from ${message.userId} for ${streamType}, we are broadcasting: ${areWeBroadcasting}`)
+
     if (areWeBroadcasting) {
       const stream = streamType === 'webcam' ? localWebcamStream.value : localDesktopStream.value
       if (stream) {
+        console.log(`[MediaStream] Creating offer for ${message.userId} with our ${streamType} stream`)
         await peerManager.createOffer(message.userId, message.userName || 'Unknown', streamType, stream)
+      } else {
+        console.log(`[MediaStream] Cannot send ${streamType} to ${message.userId}: no local stream`)
       }
+    } else {
+      console.log(`[MediaStream] Not sending ${streamType} to ${message.userId}: not broadcasting`)
     }
   }
 
@@ -270,14 +297,21 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
   const checkAndConnectToExistingMedia = async () => {
     const { onlineUsers } = useChatState()
 
+    console.log(`[MediaStream] checkAndConnectToExistingMedia called, ${onlineUsers.value.length} online users`)
+    console.log(`[MediaStream] Our state: webcam=${webcamEnabled.value}, screen=${screenEnabled.value}`)
+
     for (const user of onlineUsers.value) {
       if (user.userId === clientId.value) continue
+
+      console.log(`[MediaStream] Checking user ${user.userId}: webcam=${user.mediaState?.webcam}, screen=${user.mediaState?.screen}`)
 
       // Handle webcam connections
       // If we're broadcasting, create our outgoing connection
       if (webcamEnabled.value && localWebcamStream.value) {
         const outgoingState = peerManager.getConnectionState(user.userId, 'webcam')
+        console.log(`[MediaStream] Our webcam -> ${user.userId}: state=${outgoingState}`)
         if (outgoingState === 'idle') {
+          console.log(`[MediaStream] Creating offer to send our webcam to ${user.userId}`)
           await peerManager.createOffer(user.userId, user.userName, 'webcam', localWebcamStream.value)
         }
       }
@@ -285,8 +319,12 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
       // If they're broadcasting, request their stream (check THEIR connection to us)
       if (user.mediaState?.webcam) {
         const incomingState = peerManager.getReverseConnectionState(user.userId, 'webcam')
+        console.log(`[MediaStream] ${user.userId} webcam -> us: reverse state=${incomingState}`)
         if (incomingState === 'idle') {
+          console.log(`[MediaStream] Requesting webcam stream from ${user.userId}`)
           await peerManager.requestStream(user.userId, 'webcam')
+        } else {
+          console.log(`[MediaStream] Not requesting webcam from ${user.userId}, already ${incomingState}`)
         }
       }
 
@@ -294,7 +332,9 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
       // If we're sharing screen, create our outgoing connection
       if (screenEnabled.value && localDesktopStream.value) {
         const outgoingState = peerManager.getConnectionState(user.userId, 'desktop')
+        console.log(`[MediaStream] Our screen -> ${user.userId}: state=${outgoingState}`)
         if (outgoingState === 'idle') {
+          console.log(`[MediaStream] Creating offer to send our screen to ${user.userId}`)
           await peerManager.createOffer(user.userId, user.userName, 'desktop', localDesktopStream.value)
         }
       }
@@ -302,11 +342,17 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
       // If they're sharing screen, request their stream (check THEIR connection to us)
       if (user.mediaState?.screen) {
         const incomingState = peerManager.getReverseConnectionState(user.userId, 'desktop')
+        console.log(`[MediaStream] ${user.userId} screen -> us: reverse state=${incomingState}`)
         if (incomingState === 'idle') {
+          console.log(`[MediaStream] Requesting screen stream from ${user.userId}`)
           await peerManager.requestStream(user.userId, 'desktop')
+        } else {
+          console.log(`[MediaStream] Not requesting screen from ${user.userId}, already ${incomingState}`)
         }
       }
     }
+
+    console.log('[MediaStream] checkAndConnectToExistingMedia completed')
   }
 
   // Reconnection logic for after refresh
