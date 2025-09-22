@@ -352,7 +352,12 @@ export const useScreenShare = () => {
   })
 
   onUnmounted(() => {
-    stopScreenShare()
+    // Development-safe cleanup - preserve connections during HMR
+    if (import.meta.env.PROD || !import.meta.hot) {
+      stopScreenShare()
+    }
+
+    // Always clear stats interval to prevent memory leaks
     if (statsInterval) {
       clearInterval(statsInterval)
     }

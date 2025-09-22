@@ -128,7 +128,7 @@ export const useSoundManager = () => {
     })
   }
 
-  // Preload sounds when component mounts
+  // Preload sounds when component mounts or immediately if not in component
   onMounted(() => {
     initializeAudio()
     testAudioPlayback()

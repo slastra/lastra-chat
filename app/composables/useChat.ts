@@ -5,9 +5,9 @@ export const useChat = (ws?: ReturnType<typeof useWebSocketChat>) => {
   const actions = useChatActions(websocket)
 
   const initialize = () => {
-    user.initUser()
-
+    // User is now auto-initialized, just check authentication
     if (!user.isAuthenticated.value) {
+      console.log('[Chat] User not authenticated during initialize()')
       navigateTo('/')
       return false
     }

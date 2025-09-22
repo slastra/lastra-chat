@@ -1,5 +1,7 @@
 <script setup lang="ts">
-const { sendMessage, sendTypingIndicator } = useChatActions()
+// Inject the chat instance from parent
+const chat = inject('chat') as ReturnType<typeof useChat>
+const { sendMessage, sendTypingIndicator } = chat
 const { typingUsers, onlineUsers, connectionStatus } = useChatState()
 const { clientId } = useUser()
 const { detectBotMention } = useBots()

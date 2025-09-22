@@ -10,10 +10,10 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
   const localWebcamStream = ref<MediaStream | null>(null)
   const localDesktopStream = ref<MediaStream | null>(null)
 
-  // Media states
-  const webcamEnabled = ref(false)
-  const micEnabled = ref(false)
-  const screenEnabled = ref(false)
+  // Media states - use persistent state to survive refreshes
+  const webcamEnabled = useState('mediaStreamWebcamEnabled', () => false)
+  const micEnabled = useState('mediaStreamMicEnabled', () => false)
+  const screenEnabled = useState('mediaStreamScreenEnabled', () => false)
 
   // VueUse media composables
   const {
@@ -81,12 +81,10 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
       webcamEnabled.value = false
       localWebcamStream.value = null
 
-      // Close all webcam connections
-      const connections = peerManager.getActiveConnections()
-      for (const conn of connections) {
-        if (conn.streamType === 'webcam') {
-          await peerManager.closeConnection(conn.remoteUserId, 'webcam')
-        }
+      // Close only sender webcam connections (where we're sending our stream)
+      const senderConnections = peerManager.getActiveConnectionsByRole('sender', 'webcam')
+      for (const conn of senderConnections) {
+        await peerManager.closeConnection(conn.remoteUserId, 'webcam')
       }
 
       // Update state
@@ -141,12 +139,10 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
       screenEnabled.value = false
       localDesktopStream.value = null
 
-      // Close all desktop connections
-      const connections = peerManager.getActiveConnections()
-      for (const conn of connections) {
-        if (conn.streamType === 'desktop') {
-          await peerManager.closeConnection(conn.remoteUserId, 'desktop')
-        }
+      // Close only sender desktop connections (where we're sharing our screen)
+      const senderConnections = peerManager.getActiveConnectionsByRole('sender', 'desktop')
+      for (const conn of senderConnections) {
+        await peerManager.closeConnection(conn.remoteUserId, 'desktop')
       }
 
       // Update state
@@ -239,16 +235,16 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
         await peerManager.closeConnection(message.userId, 'desktop')
       }
 
-      // If user turned on media and we're not broadcasting, request their stream
-      if (message.mediaState.webcam && !webcamEnabled.value) {
-        const state = peerManager.getConnectionState(message.userId, 'webcam')
-        if (state === 'idle' || state === 'failed' || state === 'closed') {
+      // If user turned on media, request their stream (check THEIR connection to us)
+      if (message.mediaState.webcam) {
+        const incomingState = peerManager.getReverseConnectionState(message.userId, 'webcam')
+        if (incomingState === 'idle' || incomingState === 'failed' || incomingState === 'closed') {
           await peerManager.requestStream(message.userId, 'webcam')
         }
       }
-      if (message.mediaState.screen && !screenEnabled.value) {
-        const state = peerManager.getConnectionState(message.userId, 'desktop')
-        if (state === 'idle' || state === 'failed' || state === 'closed') {
+      if (message.mediaState.screen) {
+        const incomingState = peerManager.getReverseConnectionState(message.userId, 'desktop')
+        if (incomingState === 'idle' || incomingState === 'failed' || incomingState === 'closed') {
           await peerManager.requestStream(message.userId, 'desktop')
         }
       }
@@ -277,36 +273,87 @@ export const useMediaStream = (ws?: ReturnType<typeof useWebSocketChat>) => {
     for (const user of onlineUsers.value) {
       if (user.userId === clientId.value) continue
 
-      // If we're broadcasting, send our stream to them
+      // Handle webcam connections
+      // If we're broadcasting, create our outgoing connection
       if (webcamEnabled.value && localWebcamStream.value) {
-        await peerManager.createOffer(user.userId, user.userName, 'webcam', localWebcamStream.value)
-      } else if (user.mediaState?.webcam) {
-        // If they have webcam and we don't, request their stream
-        const state = peerManager.getConnectionState(user.userId, 'webcam')
-        if (state === 'idle') {
+        const outgoingState = peerManager.getConnectionState(user.userId, 'webcam')
+        if (outgoingState === 'idle') {
+          await peerManager.createOffer(user.userId, user.userName, 'webcam', localWebcamStream.value)
+        }
+      }
+
+      // If they're broadcasting, request their stream (check THEIR connection to us)
+      if (user.mediaState?.webcam) {
+        const incomingState = peerManager.getReverseConnectionState(user.userId, 'webcam')
+        if (incomingState === 'idle') {
           await peerManager.requestStream(user.userId, 'webcam')
         }
       }
 
-      // Same for screen share
+      // Handle screen share connections
+      // If we're sharing screen, create our outgoing connection
       if (screenEnabled.value && localDesktopStream.value) {
-        await peerManager.createOffer(user.userId, user.userName, 'desktop', localDesktopStream.value)
-      } else if (user.mediaState?.screen) {
-        const state = peerManager.getConnectionState(user.userId, 'desktop')
-        if (state === 'idle') {
+        const outgoingState = peerManager.getConnectionState(user.userId, 'desktop')
+        if (outgoingState === 'idle') {
+          await peerManager.createOffer(user.userId, user.userName, 'desktop', localDesktopStream.value)
+        }
+      }
+
+      // If they're sharing screen, request their stream (check THEIR connection to us)
+      if (user.mediaState?.screen) {
+        const incomingState = peerManager.getReverseConnectionState(user.userId, 'desktop')
+        if (incomingState === 'idle') {
           await peerManager.requestStream(user.userId, 'desktop')
         }
       }
     }
   }
 
+  // Reconnection logic for after refresh
+  const attemptStreamReconnection = async () => {
+    if (import.meta.client) {
+      // Wait a bit for UI to initialize
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // Attempt to restore webcam if it was enabled
+      if (webcamEnabled.value && !localWebcamStream.value) {
+        console.log('[MediaStream] Attempting to restore webcam after refresh')
+        try {
+          await toggleWebcam()
+        } catch (error) {
+          console.error('[MediaStream] Failed to restore webcam:', error)
+          webcamEnabled.value = false
+        }
+      }
+
+      // Attempt to restore screen share if it was enabled
+      if (screenEnabled.value && !localDesktopStream.value) {
+        console.log('[MediaStream] Attempting to restore screen share after refresh')
+        try {
+          await toggleScreen()
+        } catch (error) {
+          console.error('[MediaStream] Failed to restore screen share:', error)
+          screenEnabled.value = false
+        }
+      }
+    }
+  }
+
+  // Initialize reconnection on mount
+  onMounted(() => {
+    attemptStreamReconnection()
+  })
+
   // Clean up on unmount
   onUnmounted(() => {
-    // Stop all local streams
-    if (webcamEnabled.value) toggleWebcam()
-    if (screenEnabled.value) toggleScreen()
+    // Development-safe cleanup
+    if (import.meta.env.PROD || !import.meta.hot) {
+      // Stop all local streams
+      if (webcamEnabled.value) toggleWebcam()
+      if (screenEnabled.value) toggleScreen()
 
-    // PeerManager will handle its own cleanup
+      // PeerManager will handle its own cleanup
+    }
   })
 
   return {

@@ -36,8 +36,7 @@ export interface UseWebSocketChatReturn {
   error: Ref<Error | null>
 }
 
-// Create a singleton WebSocket instance
-let sharedWebSocket: ReturnType<typeof createWebSocketChat> | null = null
+// No singleton pattern - create fresh instances for fresh client IDs
 
 const createWebSocketChat = (options: UseWebSocketChatOptions = {}) => {
   const {
@@ -72,7 +71,7 @@ const createWebSocketChat = (options: UseWebSocketChatOptions = {}) => {
 
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const host = window.location.host
-    const url = `${protocol}://${host}/chat`
+    const url = `${protocol}://${host}/ws`
     return url
   })
 
@@ -98,6 +97,15 @@ const createWebSocketChat = (options: UseWebSocketChatOptions = {}) => {
       message: JSON.stringify({ type: 'ping' }),
       interval: heartbeatInterval,
       pongTimeout: heartbeatInterval * 2
+    },
+    onConnected: () => {
+      console.log('[WS] WebSocket connected successfully')
+    },
+    onDisconnected: () => {
+      console.log('[WS] WebSocket disconnected')
+    },
+    onError: (ws, event) => {
+      console.error('[WS] WebSocket error:', event)
     }
   })
 
@@ -203,8 +211,10 @@ const createWebSocketChat = (options: UseWebSocketChatOptions = {}) => {
         setConnectionStatus('connected')
         hasReceivedInitialData.value = false
         error.value = null
-        // Send authentication immediately
-        authenticate()
+        // Wait a moment before authenticating to ensure connection is stable
+        setTimeout(() => {
+          authenticate()
+        }, 100)
         break
 
       case 'CLOSED':
@@ -213,16 +223,23 @@ const createWebSocketChat = (options: UseWebSocketChatOptions = {}) => {
     }
   })
 
-  // Authentication
+  // Simple authentication check - user should be ready before connecting
+  const isUserReady = (): boolean => {
+    return !!(userName.value && clientId.value)
+  }
+
+  // Simple authentication - user must be ready before calling
   const authenticate = () => {
-    if (!userName.value || !clientId.value) {
+    if (!isUserReady()) {
       console.error('[WS] Cannot authenticate: missing userName or clientId', {
         userName: userName.value,
         clientId: clientId.value
       })
+      error.value = new Error('Authentication failed: missing user credentials')
       return
     }
 
+    console.log('[WS] Authenticating user:', { userName: userName.value, clientId: clientId.value })
     send('auth', {
       userId: clientId.value,
       userName: userName.value
@@ -235,7 +252,8 @@ const createWebSocketChat = (options: UseWebSocketChatOptions = {}) => {
   }
 
   const handleAuthSuccess = (_data: AuthData) => {
-    // Auth success handled by connection state
+    // Auth success
+    console.log('[WS] Authentication successful')
   }
 
   const handleError = (data: ErrorData) => {
@@ -408,10 +426,13 @@ const createWebSocketChat = (options: UseWebSocketChatOptions = {}) => {
   // Auto-connect is handled by the consumer (useChat) when appropriate
   // This avoids unnecessary watchers and gives better control
 
-  // Clean up on unmount
+  // Development-safe cleanup
   onUnmounted(() => {
-    disconnect()
-    messageHandlers.clear()
+    // Only disconnect in production or when not in HMR
+    if (import.meta.env.PROD || !import.meta.hot) {
+      disconnect()
+      messageHandlers.clear()
+    }
   })
 
   return {
@@ -431,14 +452,7 @@ const createWebSocketChat = (options: UseWebSocketChatOptions = {}) => {
   }
 }
 
-// Export the singleton wrapper
+// Export the WebSocket chat composable - creates fresh instances
 export const useWebSocketChat = (options: UseWebSocketChatOptions = {}) => {
-  // Return existing instance if available
-  if (sharedWebSocket) {
-    return sharedWebSocket
-  }
-
-  // Create new instance and store it
-  sharedWebSocket = createWebSocketChat(options)
-  return sharedWebSocket
+  return createWebSocketChat(options)
 }

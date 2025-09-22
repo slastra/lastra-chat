@@ -1,16 +1,20 @@
 <script setup lang="ts">
+const { setUserName } = useUser()
 const loading = ref(false)
 
 const state = reactive({
   name: ''
 })
 
+// No auto-redirect - users must enter name fresh each time
+
 async function joinChat() {
   if (!state.name.trim()) return
 
   loading.value = true
 
-  sessionStorage.setItem('userName', state.name.trim())
+  // Use the composable method to ensure proper state management
+  setUserName(state.name.trim())
 
   await navigateTo('/chat')
 }

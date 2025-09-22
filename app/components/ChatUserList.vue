@@ -3,15 +3,37 @@ const { onlineUsers, getUserStreams } = useChatState()
 const { clientId } = useUser()
 const { bots, toggleBot, isBotEnabled } = useBots()
 
+// Access peer manager for connection states
+const ws = inject('chat') as ReturnType<typeof useChat>
+const mediaStream = useMediaStream(ws)
+const peerManager = mediaStream.peerManager
+
 const sortedUsers = computed(() =>
   [...onlineUsers.value]
     .filter(user => !user.userId?.startsWith('ai-')) // Filter out bots
     .sort((a, b) => a.userName.localeCompare(b.userName))
 )
+
+// Get connection state for a user and stream type
+const getConnectionState = (userId: string, streamType: 'webcam' | 'desktop') => {
+  if (userId === clientId.value) return 'self'
+  return peerManager.getConnectionState(userId, streamType)
+}
+
+// Get connection state color
+const getStateColor = (state: string) => {
+  switch (state) {
+    case 'connected': return 'success'
+    case 'connecting': case 'offering': case 'answering': return 'warning'
+    case 'failed': return 'error'
+    case 'self': return 'info'
+    default: return 'neutral'
+  }
+}
 </script>
 
 <template>
-  <div class="h-full w-full overflow-y-auto p-2">
+  <div class="h-full w-full overflow-y-auto ">
     <div class="space-y-2 w-full">
       <div
         v-for="user in sortedUsers"
@@ -40,6 +62,22 @@ const sortedUsers = computed(() =>
                 }
             "
             size="sm"
+          />
+        </div>
+
+        <!-- Connection States -->
+        <div v-if="user.userId !== clientId" class="flex gap-2 text-xs">
+          <UBadge
+            :label="`Webcam: ${getConnectionState(user.userId, 'webcam')}`"
+            :color="getStateColor(getConnectionState(user.userId, 'webcam'))"
+            variant="subtle"
+            size="xs"
+          />
+          <UBadge
+            :label="`Screen: ${getConnectionState(user.userId, 'desktop')}`"
+            :color="getStateColor(getConnectionState(user.userId, 'desktop'))"
+            variant="subtle"
+            size="xs"
           />
         </div>
 

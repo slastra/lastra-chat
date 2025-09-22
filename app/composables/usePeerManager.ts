@@ -50,16 +50,28 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
   // Track pending answer processing to prevent race conditions
   const pendingAnswers = ref<Set<string>>(new Set())
 
-  // Generate consistent connection ID
+  // Generate directional connection ID
   const getConnectionId = (remoteUserId: string, streamType: StreamType): string => {
-    // Always use alphabetically sorted user IDs to ensure consistency
-    const sortedIds = [clientId.value, remoteUserId].sort()
-    return `${sortedIds[0]}-${sortedIds[1]}-${streamType}`
+    // Use directional IDs: localUser-to-remoteUser-streamType
+    // This ensures separate connections for each direction
+    return `${clientId.value}-to-${remoteUserId}-${streamType}`
+  }
+
+  // Generate reverse connection ID (for when remote user is sending to us)
+  const getReverseConnectionId = (remoteUserId: string, streamType: StreamType): string => {
+    return `${remoteUserId}-to-${clientId.value}-${streamType}`
   }
 
   // Get or check connection state
   const getConnectionState = (remoteUserId: string, streamType: StreamType): ConnectionState => {
     const id = getConnectionId(remoteUserId, streamType)
+    const conn = connections.value.get(id)
+    return conn?.state || ConnectionState.IDLE
+  }
+
+  // Get reverse connection state (for checking incoming connections)
+  const getReverseConnectionState = (remoteUserId: string, streamType: StreamType): ConnectionState => {
+    const id = getReverseConnectionId(remoteUserId, streamType)
     const conn = connections.value.get(id)
     return conn?.state || ConnectionState.IDLE
   }
@@ -135,9 +147,10 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
     remoteUserId: string,
     remoteUserName: string,
     streamType: StreamType,
-    role: 'sender' | 'receiver'
+    role: 'sender' | 'receiver',
+    connectionId?: string
   ): Promise<PeerConnection> => {
-    const id = getConnectionId(remoteUserId, streamType)
+    const id = connectionId || getConnectionId(remoteUserId, streamType)
 
     // Check if connection already exists
     const existing = connections.value.get(id)
@@ -155,8 +168,7 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
       iceServers,
       iceTransportPolicy: 'all',
       bundlePolicy: 'max-bundle',
-      rtcpMuxPolicy: 'require',
-      iceCandidatePoolSize: 2 // Reduce ICE candidate generation
+      rtcpMuxPolicy: 'require'
     })
 
     const connection: PeerConnection = {
@@ -198,7 +210,10 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
       }
 
       if (pc.connectionState === 'connected') {
-        updateConnectionState(id, ConnectionState.CONNECTED)
+        // Only update if not already connected (prevents connected -> connected transition)
+        if (currentConn && currentConn.state !== ConnectionState.CONNECTED) {
+          updateConnectionState(id, ConnectionState.CONNECTED)
+        }
       } else if (pc.connectionState === 'failed') {
         updateConnectionState(id, ConnectionState.FAILED)
         options.onStreamRemoved?.(remoteUserId, streamType)
@@ -331,23 +346,40 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
   ): Promise<void> => {
     if (!message.offer || !message.streamType) return
 
-    const id = getConnectionId(message.userId, message.streamType)
+    // Check if this is a response to our stream request
+    const ourRequestId = getConnectionId(message.userId, message.streamType)
+    const existingRequest = connections.value.get(ourRequestId)
 
-    // Check if we already have a connection
-    const existingConn = connections.value.get(id)
-    if (existingConn) {
-      // If we're in REQUESTING state, this is the offer we requested - proceed
-      if (existingConn.state === ConnectionState.REQUESTING) {
-        // Delete the placeholder so we can create a real connection
-        connections.value.delete(id)
-      } else if (existingConn.state !== ConnectionState.CLOSED && existingConn.state !== ConnectionState.FAILED) {
+    let conn: PeerConnection
+    let id: string
+
+    if (existingRequest && existingRequest.state === ConnectionState.REQUESTING) {
+      // This is a response to our request - use our existing connection
+      id = ourRequestId
+      conn = existingRequest
+
+      // Update the placeholder to have the actual role and connection
+      const role = localStream ? 'sender' : 'receiver'
+
+      // Delete placeholder and create real connection with same ID
+      connections.value.delete(id)
+      conn = await createConnection(message.userId, message.userName || 'Unknown', message.streamType, role, id)
+    } else {
+      // This is an unsolicited offer - create new connection with reverse ID
+      const reverseId = getReverseConnectionId(message.userId, message.streamType)
+
+      // Check if we already have this connection
+      const existingConn = connections.value.get(reverseId)
+      if (existingConn && existingConn.state !== ConnectionState.CLOSED && existingConn.state !== ConnectionState.FAILED) {
         return
       }
+
+      // Create new connection
+      const role = localStream ? 'sender' : 'receiver'
+      conn = await createConnection(message.userId, message.userName || 'Unknown', message.streamType, role, reverseId)
+      id = reverseId
     }
 
-    // Create new connection
-    const role = localStream ? 'sender' : 'receiver'
-    const conn = await createConnection(message.userId, message.userName || 'Unknown', message.streamType, role)
     if (!conn) return
 
     updateConnectionState(id, ConnectionState.ANSWERING)
@@ -462,8 +494,17 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
   const handleIceCandidate = async (message: SignalingMessage): Promise<void> => {
     if (!message.candidate || !message.streamType) return
 
-    const id = getConnectionId(message.userId, message.streamType)
-    const conn = connections.value.get(id)
+    // ICE candidates can be for either direction, check both
+    const outgoingId = getConnectionId(message.userId, message.streamType)
+    const incomingId = getReverseConnectionId(message.userId, message.streamType)
+
+    let conn = connections.value.get(outgoingId)
+    let id = outgoingId
+
+    if (!conn) {
+      conn = connections.value.get(incomingId)
+      id = incomingId
+    }
     const candidate = new RTCIceCandidate(message.candidate)
 
     if (!conn || !conn.connection) {
@@ -534,6 +575,15 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
     )
   }
 
+  // Get active connections by role and stream type
+  const getActiveConnectionsByRole = (role: 'sender' | 'receiver', streamType?: StreamType) => {
+    return Array.from(connections.value.values()).filter(
+      conn => conn.state === ConnectionState.CONNECTED
+        && conn.role === role
+        && (streamType ? conn.streamType === streamType : true)
+    )
+  }
+
   // Clean up stale connections (older than 30 seconds without activity)
   const cleanupStaleConnections = () => {
     const now = Date.now()
@@ -561,7 +611,9 @@ export const usePeerManager = (options: PeerManagerOptions = {}) => {
   return {
     // State queries
     getConnectionState,
+    getReverseConnectionState,
     getActiveConnections,
+    getActiveConnectionsByRole,
 
     // Connection management
     requestStream,

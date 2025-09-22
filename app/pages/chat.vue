@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import type { SignalingMessage } from '../../shared/types/webrtc'
 
+definePageMeta({
+  middleware: 'auth'
+})
+
 const { loadBots } = useBots()
-// Create a single WebSocket instance to share
+
+// Create all composables in setup context (synchronous)
 const ws = useWebSocketChat()
 const mediaStream = useMediaStream(ws)
 const chat = useChat(ws)
@@ -20,16 +25,21 @@ const handleUserList = () => {
   }, 100)
 }
 
+// Register WebRTC handlers in setup context
+ws.on('webrtc-signal', handleWebRTCSignal)
+ws.on('user-list', handleUserList)
+
+// Provide chat instance to child components
+provide('chat', chat)
+
 onMounted(async () => {
+  // Middleware handles auth, safe to proceed
+
   // Load bots first
   await loadBots()
-  isReady.value = chat.initialize()
 
-  // Register WebRTC handlers with the mediaStream
-  if (isReady.value) {
-    ws.on('webrtc-signal', handleWebRTCSignal)
-    ws.on('user-list', handleUserList)
-  }
+  // Initialize chat (which will connect WebSocket)
+  isReady.value = chat.initialize()
 })
 
 onUnmounted(() => {
@@ -68,7 +78,7 @@ const handleDeviceChange = (_type: 'video' | 'audio', _deviceId: string) => {
       class="bg-elevated/50"
     >
       <template #header>
-        <div class="flex items-center justify-between w-full p-4 gap-2">
+        <div class="flex items-center justify-between w-full  gap-2">
           <h3 class="font-semibold ">
             Online Users
           </h3>
@@ -85,7 +95,7 @@ const handleDeviceChange = (_type: 'video' | 'audio', _deviceId: string) => {
       </div>
 
       <template #footer>
-        <div class="w-full p-4">
+        <div class="w-full py-4">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2 text-sm">
               <UIcon name="i-lucide-user" class="w-4 h-4" />

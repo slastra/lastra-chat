@@ -9,12 +9,17 @@ interface _TestPeer {
 }
 
 export const useScreenShareTest = () => {
-  const testId = ref(Math.random().toString(36).substring(7))
-  const roomId = ref('')
-  const role = ref<'idle' | 'sharer' | 'viewer'>('idle')
+  // Use persistent state to survive refreshes
+  const testId = useState('screenShareTestId', () => Math.random().toString(36).substring(7))
+  const roomId = useState('screenShareRoomId', () => '')
+  const role = useState<'idle' | 'sharer' | 'viewer'>('screenShareRole', () => 'idle')
   const isConnected = ref(false)
   const connectionState = ref<RTCPeerConnectionState>('new')
   const iceConnectionState = ref<RTCIceConnectionState>('new')
+
+  // WebRTC state persistence
+  const webrtcState = useWebRTCState()
+  const sessionId = `screen-share-test-${testId.value}`
 
   const { stream: displayStream, start: startCapture, stop: stopCapture } = useDisplayMedia({
     video: {
@@ -29,6 +34,9 @@ export const useScreenShareTest = () => {
   const remoteStream = ref<MediaStream | null>(null)
   const peerConnection = ref<RTCPeerConnection | null>(null)
   const dataChannel = ref<RTCDataChannel | null>(null)
+
+  // Use persistent state for interval management to prevent memory leaks
+  const activeIntervals = useState<Map<string, NodeJS.Timeout>>('screenShareIntervals', () => new Map())
   const pollingInterval = ref<NodeJS.Timeout | null>(null)
 
   const debugLogs = ref<Array<{ time: string, message: string, type: 'info' | 'error' | 'success' }>>([])
@@ -189,6 +197,13 @@ export const useScreenShareTest = () => {
         addDebugLog(`Connection state: ${connectionState.value}`,
           connectionState.value === 'connected' ? 'success' : 'info')
 
+        // Update persistent state
+        webrtcState.updateSession(sessionId, {
+          connectionState: connectionState.value,
+          isSharing: role.value === 'sharer' && connectionState.value === 'connected',
+          isViewing: role.value === 'viewer' && connectionState.value === 'connected'
+        })
+
         if (connectionState.value === 'connected') {
           isConnected.value = true
           startStatsCollection()
@@ -341,6 +356,45 @@ export const useScreenShareTest = () => {
     }
   }
 
+  // Initialize session and check for reconnection
+  const initializeSession = () => {
+    // Create or get session state
+    if (!webrtcState.getCurrentSession()) {
+      webrtcState.createSession(sessionId, {
+        roomId: roomId.value,
+        role: role.value
+      })
+    }
+
+    // Check if we should attempt reconnection
+    if (webrtcState.shouldReconnect(sessionId)) {
+      const reconnectionInfo = webrtcState.getReconnectionInfo(sessionId)
+      if (reconnectionInfo && reconnectionInfo.roomId) {
+        addDebugLog(`Attempting to reconnect to room: ${reconnectionInfo.roomId}`, 'info')
+        roomId.value = reconnectionInfo.roomId
+
+        // Restore previous role if it was active
+        if (reconnectionInfo.role !== 'idle') {
+          role.value = reconnectionInfo.role
+
+          // Attempt to restore connection
+          setTimeout(() => {
+            if (role.value === 'sharer') {
+              startSharing()
+            } else if (role.value === 'viewer') {
+              startViewing()
+            }
+          }, 1000)
+        }
+      }
+    }
+  }
+
+  // Call initialization on mount or immediately if not in component
+  onMounted(() => {
+    initializeSession()
+  })
+
   // Join room
   const joinRoom = async () => {
     await $fetch('/api/screen-share-test/join', {
@@ -352,9 +406,18 @@ export const useScreenShareTest = () => {
       }
     })
 
-    // Start polling for messages
+    // Start polling for messages with proper cleanup
+    const intervalKey = `polling-${roomId.value}-${testId.value}`
+
+    // Clear any existing interval for this room
+    const existingInterval = activeIntervals.value.get(intervalKey)
+    if (existingInterval) {
+      clearInterval(existingInterval)
+    }
+
     if (!pollingInterval.value) {
       pollingInterval.value = setInterval(pollMessages, 1000)
+      activeIntervals.value.set(intervalKey, pollingInterval.value)
     }
 
     addDebugLog(`Joined room: ${roomId.value}`, 'success')
@@ -402,9 +465,12 @@ export const useScreenShareTest = () => {
 
   // Leave room
   const leaveRoom = async () => {
+    const intervalKey = `polling-${roomId.value}-${testId.value}`
+
     if (pollingInterval.value) {
       clearInterval(pollingInterval.value)
       pollingInterval.value = null
+      activeIntervals.value.delete(intervalKey)
     }
 
     try {
@@ -458,11 +524,17 @@ export const useScreenShareTest = () => {
     }
   }
 
-  // Cleanup on unmount
+  // Development-safe cleanup that preserves connections during HMR
   onUnmounted(() => {
-    stopSharing()
-    stopViewing()
-    stopStatsCollection()
+    // Only cleanup if not in development hot reload or if explicitly navigating away
+    if (import.meta.env.PROD || !import.meta.hot) {
+      stopSharing()
+      stopViewing()
+      stopStatsCollection()
+    } else {
+      // In development, only stop stats collection to prevent memory leaks
+      stopStatsCollection()
+    }
   })
 
   return {
