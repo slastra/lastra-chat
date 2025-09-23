@@ -5,7 +5,7 @@ const activeRooms = getWebcamTestRooms()
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { roomId, clientId, role } = body
+  const { roomId, clientId } = body
 
   if (!roomId || !clientId) {
     throw createError({
@@ -22,9 +22,6 @@ export default defineEventHandler(async (event) => {
   // Add client to room
   const room = activeRooms.get(roomId)!
   room.add(clientId)
-
-  console.log(`[WebcamTest] ${clientId} joined room ${roomId} as ${role}`)
-  console.log(`[WebcamTest] Room ${roomId} now has ${room.size} participant(s)`)
 
   return {
     success: true,

@@ -1,8 +1,20 @@
 <script setup lang="ts">
-// Inject the chat instance from parent
-const chat = inject('chat') as ReturnType<typeof useChat>
-const { sendMessage, sendTypingIndicator } = chat
-const { typingUsers, onlineUsers, connectionStatus } = useChatState()
+import type { UseLiveKitChatReturn } from '../composables/useLiveKitChat'
+import type { UseLiveKitRoomReturn } from '../composables/useLiveKitRoom'
+
+// Inject LiveKit instances
+const liveKitChat = inject('liveKitChat') as UseLiveKitChatReturn
+const liveKitRoom = inject('liveKitRoom') as UseLiveKitRoomReturn
+const liveKitBots = inject('liveKitBots') as { checkOutgoingMessage?: (content: string, roomName: string) => Promise<void> }
+
+// Use LiveKit bridge for compatibility
+const chatState = useLiveKitChatState(liveKitChat, liveKitRoom)
+const { typingUsers, onlineUsers, connectionStatus } = chatState
+
+// Use LiveKit chat methods
+const sendMessage = liveKitChat.sendMessage
+const sendTypingIndicator = liveKitChat.sendTypingIndicator
+
 const { clientId } = useUser()
 const { detectBotMention } = useBots()
 const { isCommand, executeCommand, getCommandSuggestions } = useSlashCommands()
@@ -67,7 +79,17 @@ const handleSubmit = async () => {
   if (isCommand(message)) {
     await executeCommand(message)
   } else {
+    // Check if this message should trigger a bot BEFORE sending
+    // This way the bot gets the context without the current message
+    const botPromise = liveKitBots?.checkOutgoingMessage
+      ? liveKitBots.checkOutgoingMessage(message, liveKitRoom.roomName)
+      : Promise.resolve()
+
+    // Send the user's message
     await sendMessage(message)
+
+    // Wait for bot check to complete
+    await botPromise
   }
 }
 
@@ -88,14 +110,14 @@ const chatStatus = computed(() => {
 <template>
   <UChatPrompt
     v-model="input"
-    :error="null"
+    :error="undefined"
     variant="subtle"
     class="[view-transition-name:chat-prompt] rounded-b-none z-10"
     placeholder="Type a message... "
     @input="handleInput"
     @submit="handleSubmit"
   >
-    <UChatPromptSubmit :status="chatStatus" />
+    <UChatPromptSubmit :status="chatStatus as any" />
 
     <template v-if="typingUsersList" #leading>
       <div class="text-xs italic text-neutral-500">

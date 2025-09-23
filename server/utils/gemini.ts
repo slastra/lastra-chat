@@ -7,7 +7,9 @@ let genAI: GoogleGenAI | null = null
 
 function getGeminiClient(): GoogleGenAI {
   if (!genAI) {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NUXT_GEMINI_API_KEY
+    // Use Nuxt's runtime config to access the environment variable
+    const config = useRuntimeConfig()
+    const apiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || process.env.NUXT_GEMINI_API_KEY
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY is not configured in environment variables')
     }
@@ -28,9 +30,10 @@ export async function generateBotResponse(options: BotResponseOptions): Promise<
 
   try {
     const genAI = getGeminiClient()
+    const config = useRuntimeConfig()
 
-    // Get the appropriate model (default to gemini-2.0-flash-exp if not specified)
-    const modelName = bot.model || 'gemini-2.0-flash-exp'
+    // Get the appropriate model (default to runtime config or fallback)
+    const modelName = bot.model || config.geminiModel || 'gemini-2.0-flash-exp'
 
     // Determine if this is a direct mention or an interjection
     const isMention = bot.triggers.some(trigger =>
@@ -64,19 +67,26 @@ Remember to keep your response brief (1-3 sentences) and in character as ${bot.n
       ? bot.temperature?.normal || 1.0
       : bot.temperature?.interjection || 1.2
 
-    // Generate the response
-    const result = await genAI.models.generateContent({
+    const requestParams = {
       model: modelName,
-      contents: systemPrompt,
+      contents: [{
+        role: 'user',
+        parts: [{
+          text: systemPrompt
+        }]
+      }],
       config: {
         temperature,
         maxOutputTokens: 150, // Keep responses short
         topP: 0.95,
         topK: 40
       }
-    })
+    }
 
-    const text = result.text
+    // Generate the response
+    const result = await genAI.models.generateContent(requestParams)
+
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text
 
     if (!text) {
       throw new Error('Empty response from Gemini')
@@ -85,7 +95,6 @@ Remember to keep your response brief (1-3 sentences) and in character as ${bot.n
     return text.trim()
   } catch (error) {
     console.error(`[Gemini] Error generating response for bot ${bot.name}:`, error)
-
     // Return a fallback response
     const fallbacks = [
       'I\'m having trouble thinking right now...',

@@ -22,9 +22,6 @@ export default defineEventHandler(async (event) => {
     // Clean up empty rooms
     if (room.size === 0) {
       activeRooms.delete(roomId)
-      console.log(`[ScreenShareTest] Room ${roomId} is now empty and removed`)
-    } else {
-      console.log(`[ScreenShareTest] ${clientId} left room ${roomId}, ${room.size} participant(s) remaining`)
     }
   }
 

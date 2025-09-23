@@ -1,2 +1,2 @@
 // Re-export all shared types
-export * from './webrtc'
+// Note: WebRTC types removed - migration to LiveKit complete

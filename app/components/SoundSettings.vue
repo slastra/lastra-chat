@@ -67,7 +67,7 @@ const handleVolumeChange = (newVolume: number) => {
         :max="1"
         :step="0.1"
         class="w-full"
-        @update:model-value="handleVolumeChange"
+        @update:model-value="(val) => handleVolumeChange(val as number)"
       />
     </div>
 
@@ -110,7 +110,7 @@ const handleVolumeChange = (newVolume: number) => {
     </div>
 
     <!-- Reset Button -->
-    <div v-if="enabled" class="pt-4 border-t border-gray-200 dark:border-gray-700">
+    <div v-if="enabled" class="pt-4 border-t border-default">
       <UButton
         variant="outline"
         color="neutral"

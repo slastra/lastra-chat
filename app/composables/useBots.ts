@@ -1,8 +1,9 @@
 import type { BotsCollectionItem } from '@nuxt/content'
 
-// Use the auto-generated type with required shyness
-export interface BotConfig extends BotsCollectionItem {
+// Use the auto-generated type with required shyness and mutable arrays
+export interface BotConfig extends Omit<BotsCollectionItem, 'triggers'> {
   shyness: number // Make shyness required
+  triggers: string[] // Make triggers mutable
 }
 
 // Client-side composable for bot detection
@@ -64,13 +65,16 @@ export const useBots = () => {
   const detectBotMention = (message: string): BotConfig | null => {
     for (const bot of bots.value) {
       // Skip disabled bots
-      if (!isBotEnabled(bot.name)) continue
+      if (!isBotEnabled(bot.name)) {
+        continue
+      }
 
       const regex = new RegExp(`\\b(${bot.triggers.join('|')})\\b`, 'i')
       if (regex.test(message)) {
         return bot
       }
     }
+
     return null
   }
 

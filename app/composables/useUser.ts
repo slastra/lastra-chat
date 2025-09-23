@@ -10,7 +10,6 @@ export const useUser = () => {
     const random = Math.random().toString(36).substring(2, 9)
     const freshClientId = `user-${timestamp}-${random}`
 
-    console.log('[User] Fresh ClientId generated:', freshClientId)
     return freshClientId
   })
 

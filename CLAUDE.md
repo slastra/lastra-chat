@@ -1,7 +1,7 @@
 # Project Instructions for Claude Code
 
 ## Project Overview
-This is a Nuxt 3 chat application with WebRTC capabilities for screen sharing and video conferencing. The project uses TypeScript, Vue 3 Composition API, and Nuxt UI v3 components.
+This is a Nuxt 3 real-time chat application using LiveKit for WebRTC-based video, audio, screen sharing, and messaging. The project uses TypeScript, Vue 3 Composition API, Nuxt UI v3 components, and integrates AI bots via Google Gemini.
 
 ## Key Requirements
 
@@ -107,41 +107,55 @@ When implementing UI features, always:
 
 ## Project-Specific Patterns
 
-### WebRTC & TURN Server
-- TURN server is configured at `turn.lastra.us` on port 5349 (TLS)
-- Uses HMAC-SHA1 authentication with static auth secret
-- Test pages available at `/turn-test`, `/display-test`, `/webcam-test`
+### LiveKit Integration
+- Uses LiveKit SFU architecture instead of mesh WebRTC
+- LiveKit server handles all peer connections and media routing
+- Data channels used for chat messaging (reliable) and typing indicators (unreliable)
 
-### WebRTC Connection Architecture
-- Uses directional connection IDs: `localUserId-to-remoteUserId-streamType`
-- Supports bidirectional streaming (users can both send and receive simultaneously)
-- **Critical**: When handling offers in response to stream requests:
-  - The requester is always the `receiver` role (they requested the stream)
-  - This applies even if they have a local stream to send back
-  - Incorrect role assignment prevents proper bidirectional streaming
-- Connection states: idle, requesting, creating, offering, answering, connected, failed, closed
-- Separate connections for webcam and desktop streams
+### LiveKit Composables
+- `useLiveKitRoom.ts` - Core room connection, media tracks, participant management
+- `useLiveKitChat.ts` - Chat messaging via data channels, typing indicators
+- `useLiveKitBots.ts` - AI bot integration with LiveKit data channels
+- `useLiveKitChatState.ts` - Bridge for legacy UI component compatibility
 
-### Server-Side Global State
-Server API endpoints use global variables for state management:
+### LiveKit Best Practices
+- **Video Track Attachment**: Use Vue template refs, not DOM IDs
 ```typescript
-const activeRooms = global.screenShareTestRooms || new Map<string, Set<string>>()
-if (!global.screenShareTestRooms) {
-  global.screenShareTestRooms = activeRooms
-}
+// ✅ Correct - VideoTrack.vue component with refs
+<video ref="videoRef" />
+const videoRef = ref<HTMLVideoElement>()
+track.attach(videoRef.value)
+
+// ❌ Incorrect - DOM ID attachment
+track.attach('video-element-id')
 ```
+- **Audio Level Monitoring**: Use `ActiveSpeakersChanged` event, not track-level events
+- **Track Lifecycle**: Always clean up track subscriptions on component unmount
+- **Connection Quality**: Monitor via `ConnectionQualityChanged` event
 
-### SSE Implementation
-Uses VueUse's `useEventSource` for Server-Sent Events:
-- Main chat SSE composable: `composables/useChatSSE.ts`
-- Avoid watchEffect when possible - use targeted event listeners
+### Server-Side Patterns
+- Bot state management persists across server restarts using in-memory storage
+- Token generation for LiveKit authentication handled server-side
+- AI bot responses streamed through data channels for real-time delivery
 
-### Testing Commands
+### Chat Implementation
+Uses LiveKit data channels for real-time communication:
+- **Reliable channels**: Chat messages, bot responses, system messages
+- **Unreliable channels**: Typing indicators, presence updates
+- Bridge pattern maintains compatibility with existing UI components
+
+### Key Features
+- **Media Device Management**: Dynamic switching of cameras, microphones, and speakers
+- **Track Lifecycle**: Proper handling of mute/unmute vs publish/unpublish events
+- **Audio Feedback Prevention**: Local audio tracks excluded from playback
+- **Connection Resilience**: Automatic reconnection with exponential backoff
+
+### Commands
 ```bash
 # Type checking
 pnpm run typecheck
 
-# Linting
+# Linting (with auto-fix)
 pnpm run lint
 
 # Development server
@@ -181,18 +195,11 @@ The project uses Nuxt 4's project references in `tsconfig.json`:
 
 Each context has its own TypeScript configuration with appropriate globals and APIs.
 
-#### Server-Side Global State Pattern
-For server-side global state, use the type-safe helper functions from `server/utils/globalStore.ts`:
-```typescript
-import { getScreenShareTestRooms, getScreenShareTestQueues } from '../../utils/globalStore'
-
-const activeRooms = getScreenShareTestRooms()
-const messageQueues = getScreenShareTestQueues()
-```
-
-The global types are defined in `/server/types/global.d.ts` and the helper functions automatically handle initialization.
-
-**DO NOT** directly access `global` variables or import `.d.ts` files in server code (causes Rollup build errors).
+#### Server-Side Patterns
+- Use environment variables for LiveKit credentials
+- Token generation includes proper grants and metadata
+- Bot responses processed server-side and sent via data channels
+- Persistent bot state management across sessions
 
 #### Type Checking
 Current: `pnpm run typecheck`
@@ -229,3 +236,76 @@ Future (Nuxt 4 recommended): `vue-tsc -b --noEmit` for better project reference 
 └── public/
     └── sounds/         # Audio notification files
 ```
+
+## LiveKit Integration (Migration Complete)
+
+**Status**: The project has successfully migrated from custom WebRTC/WebSocket to LiveKit. Core functionality is working with a few remaining bugs to be addressed. See `livekit-migration.md` for migration history and `livekit.txt` for LiveKit documentation resources.
+
+### LiveKit Configuration
+
+#### Environment Variables
+```env
+LIVEKIT_KEY=devkey        # API key for token generation
+LIVEKIT_SECRET=secret     # API secret for token generation
+LIVEKIT_URL=ws://localhost:7880  # LiveKit server URL (dev mode)
+```
+
+#### Development Setup
+1. **Start LiveKit Server**: `livekit-server --dev`
+2. **Dashboard**: Available at http://localhost:7880 in dev mode
+3. **CLI Tool**: Use `lk` command for room management and testing
+
+### LiveKit Architecture
+
+#### Token Generation
+- Tokens are generated server-side using `/server/api/livekit-token.post.ts`
+- Include user identity, name, and metadata
+- Grant appropriate permissions (publish, subscribe, data channels)
+
+#### Room Management
+- Single Room instance per user session
+- Automatic reconnection handling
+- Adaptive streaming and dynamic broadcasting (dynacast)
+
+#### Data Channels
+- **Reliable**: Chat messages, bot responses, system notifications
+- **Unreliable**: Typing indicators, ephemeral updates
+- 16KB message size limit (chunk larger messages if needed)
+
+### LiveKit Best Practices
+
+1. **Connection Management**
+   - Use `prepareConnection()` for faster room joins
+   - Set `disconnectOnPageLeave: false` for better UX during navigation
+   - Handle reconnection events appropriately
+
+2. **Track Management**
+   - Use `enableCameraAndMicrophone()` for initial setup
+   - Individual control with `setCameraEnabled()` and `setMicrophoneEnabled()`
+   - Always clean up tracks on unmount
+
+3. **Data Channel Messages**
+   - Define clear message types and schemas
+   - Use JSON for structured data
+   - Implement message versioning for compatibility
+
+4. **Error Handling**
+   - Listen for `RoomEvent.Disconnected` with error reasons
+   - Implement retry logic for token generation
+   - Provide user feedback for connection issues
+
+### Recent Improvements
+
+**Completed Fixes:**
+- Fixed duplicate messages being sent to bot context
+- Resolved camera track cleanup issues (handle mute events vs unpublish)
+- Fixed audio feedback by properly filtering local participant audio
+- Corrected device switching to use LiveKit's switchActiveDevice API
+- Fixed identity comparison (LiveKit identity vs clientId)
+- Resolved all TypeScript and linting errors
+
+**Architecture Improvements:**
+- Migrated from custom WebRTC/WebSocket to LiveKit SFU
+- Implemented proper track lifecycle management
+- Added comprehensive audio level monitoring
+- Integrated customizable sound notifications

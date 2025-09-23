@@ -51,12 +51,12 @@ export async function sendNtfyNotification(
     })
 
     if (!response.ok) {
-      console.error('[NTFY] Failed to send notification:', response.status, response.statusText)
+      // Failed to send notification - non-critical error
     } else {
-      console.log('[NTFY] Notification sent successfully')
+      // Notification sent successfully
     }
   } catch (error) {
-    console.error('[NTFY] Error sending notification:', error)
+    console.error('[ntfy] Failed to send notification:', error)
   }
 }
 

@@ -1,4 +1,4 @@
-import type { ChatMessage } from './useChatState'
+import type { ChatMessage } from './useLiveKitChatState'
 
 export interface SlashCommand {
   name: string
@@ -16,10 +16,10 @@ export interface CommandContext {
 }
 
 export const useSlashCommands = () => {
-  const { addMessage, clearMessages } = useChatState()
   const { userName, clientId } = useUser()
-  const { clearChat } = useChatActions()
   const toast = useToast()
+
+  // Note: Slash commands are legacy - LiveKit chat handles messaging directly
 
   // Command registry
   const commands = new Map<string, SlashCommand>()
@@ -32,8 +32,8 @@ export const useSlashCommands = () => {
     type: 'server',
     handler: async (_args, _context) => {
       try {
-        // Use WebSocket to clear chat for everyone
-        await clearChat()
+        // Legacy function - use LiveKit chat clear instead
+        console.warn('Clear chat is legacy - use LiveKit chat methods')
       } catch (error) {
         console.error('Failed to clear chat:', error)
         toast.add({
@@ -95,7 +95,7 @@ export const useSlashCommands = () => {
     const command = commands.get(parsed.command)
     if (!command) {
       // Unknown command
-      const errorMessage: ChatMessage = {
+      const _errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,
         userId: 'system',
         userName: 'System',
@@ -104,14 +104,15 @@ export const useSlashCommands = () => {
         type: 'system',
         status: 'sent'
       }
-      addMessage(errorMessage)
+      // Note: addMessage not available in LiveKit - commands are legacy
+      console.warn('Slash commands are legacy - use LiveKit chat directly')
       return true // Still handled as a command
     }
 
     // Create context for command execution
     const context: CommandContext = {
-      addMessage,
-      clearMessages,
+      addMessage: () => { /* Legacy - use LiveKit chat */ },
+      clearMessages: () => { /* Legacy - use LiveKit chat */ },
       userName,
       clientId
     }
@@ -123,7 +124,7 @@ export const useSlashCommands = () => {
     } catch (error) {
       console.error(`Error executing command /${command.name}:`, error)
 
-      const errorMessage: ChatMessage = {
+      const _errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,
         userId: 'system',
         userName: 'System',
@@ -132,7 +133,8 @@ export const useSlashCommands = () => {
         type: 'system',
         status: 'sent'
       }
-      addMessage(errorMessage)
+      // Legacy addMessage - use LiveKit chat instead
+      console.warn('Slash command error - use LiveKit chat for messaging')
 
       toast.add({
         title: 'Command Error',

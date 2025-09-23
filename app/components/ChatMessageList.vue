@@ -1,25 +1,41 @@
 <script setup lang="ts">
-const { messages, connectionStatus } = useChatState()
+import type { UseLiveKitChatReturn } from '../composables/useLiveKitChat'
+import type { UseLiveKitRoomReturn } from '../composables/useLiveKitRoom'
+
+const liveKitChat = inject('liveKitChat') as UseLiveKitChatReturn
+const liveKitRoom = inject('liveKitRoom') as UseLiveKitRoomReturn
+
+// Use LiveKit bridge to provide legacy compatibility
+const chatState = useLiveKitChatState(liveKitChat, liveKitRoom)
+const { messages, connectionStatus } = chatState
+
 const messagesContainer = ref<HTMLElement>()
 
-// Filter out empty AI messages (during initial streaming)
+// Filter out empty bot messages (during initial streaming)
 const visibleMessages = computed(() =>
-  messages.value.filter(m => m.type !== 'ai' || m.content.trim().length > 0)
+  messages.value.filter(m => m.type !== 'bot' || m.content.trim().length > 0)
 )
 
 // Simple scroll to bottom function
 const scrollToBottom = () => {
   if (!messagesContainer.value) return
-  messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+  // Use setTimeout to ensure DOM is fully updated
+  setTimeout(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  }, 100)
 }
 
 // Scroll on any message update
-watchEffect(() => {
-  // This will trigger on any change to messages (new messages or content updates)
-  if (visibleMessages.value.length > 0) {
-    nextTick(() => scrollToBottom())
+watch(visibleMessages, (newMessages, oldMessages) => {
+  if (!newMessages.length) return
+
+  // Check if a new message was added
+  if (!oldMessages || newMessages.length > oldMessages.length) {
+    scrollToBottom()
   }
-})
+}, { deep: true })
 
 // Initial scroll on mount
 onMounted(() => {

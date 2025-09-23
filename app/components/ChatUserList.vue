@@ -1,44 +1,47 @@
 <script setup lang="ts">
-const { onlineUsers, getUserStreams } = useChatState()
-const { clientId } = useUser()
+import type { UseLiveKitRoomReturn } from '../composables/useLiveKitRoom'
+import type { UseLiveKitChatReturn } from '../composables/useLiveKitChat'
+
+const liveKitRoom = inject('liveKitRoom') as UseLiveKitRoomReturn
+const liveKitChat = inject('liveKitChat') as UseLiveKitChatReturn
 const { bots, toggleBot, isBotEnabled } = useBots()
 
-// Access peer manager for connection states
-const ws = inject('chat') as ReturnType<typeof useChat>
-const mediaStream = useMediaStream(ws)
-const peerManager = mediaStream.peerManager
+const sortedUsers = computed(() => {
+  const users = []
 
-const sortedUsers = computed(() =>
-  [...onlineUsers.value]
-    .filter(user => !user.userId?.startsWith('ai-')) // Filter out bots
-    .sort((a, b) => a.userName.localeCompare(b.userName))
-)
-
-// Get connection state for a user and stream type
-const getConnectionState = (userId: string, streamType: 'webcam' | 'desktop') => {
-  if (userId === clientId.value) return 'self'
-  return peerManager.getConnectionState(userId, streamType)
-}
-
-// Get connection state color
-const getStateColor = (state: string) => {
-  switch (state) {
-    case 'connected': return 'success'
-    case 'connecting': case 'offering': case 'answering': return 'warning'
-    case 'failed': return 'error'
-    case 'self': return 'info'
-    default: return 'neutral'
+  // Add local participant
+  if (liveKitRoom?.localParticipant.value) {
+    users.push(liveKitRoom.localParticipant.value)
   }
-}
+
+  // Add remote participants
+  if (liveKitRoom?.remoteParticipants.value) {
+    users.push(...liveKitRoom.remoteParticipants.value)
+  }
+
+  return users
+    .filter(user => !user.identity?.startsWith('ai-')) // Filter out bots
+    .map(user => ({
+      userId: user.identity,
+      userName: user.name || user.identity,
+      mediaState: {
+        webcam: user.isCameraEnabled,
+        microphone: user.isMicrophoneEnabled,
+        screen: user.isScreenShareEnabled
+      },
+      isTyping: liveKitChat?.typingUsers.value?.includes(user.name || user.identity) || false
+    }))
+    .sort((a, b) => a.userName.localeCompare(b.userName))
+})
 </script>
 
 <template>
-  <div class="h-full w-full overflow-y-auto ">
+  <div class="h-full w-full overflow-y-auto">
     <div class="space-y-2 w-full">
       <div
         v-for="user in sortedUsers"
         :key="user.userId"
-        class="space-y-2 border rounded-lg border-accented p-2 "
+        class="space-y-2 border rounded-lg border-accented bg-default/50 p-2"
       >
         <div class="flex items-center justify-between">
           <UUser
@@ -46,7 +49,7 @@ const getStateColor = (state: string) => {
             :description="
               user.isTyping
                 ? 'typing...'
-                : user.userId === clientId
+                : user.userId === liveKitRoom?.localParticipant.value?.identity
                   ? 'You'
                   : user.userId?.startsWith('ai-')
                     ? 'AI Assistant'
@@ -63,41 +66,59 @@ const getStateColor = (state: string) => {
             "
             size="sm"
           />
+
+          <!-- Media Status Indicators -->
+          <div class="flex items-center gap-1">
+            <UIcon
+              v-if="user.mediaState?.webcam"
+              name="i-lucide-video"
+              class="text-muted"
+            />
+            <UIcon
+              v-if="user.mediaState?.microphone"
+              name="i-lucide-mic"
+              class="text-muted"
+            />
+            <UIcon
+              v-if="user.mediaState?.screen"
+              name="i-lucide-monitor-up"
+              class="text-muted"
+            />
+          </div>
         </div>
 
-        <!-- Connection States -->
-        <div v-if="user.userId !== clientId" class="flex gap-2 text-xs">
-          <UBadge
-            :label="`Webcam: ${getConnectionState(user.userId, 'webcam')}`"
-            :color="getStateColor(getConnectionState(user.userId, 'webcam'))"
-            variant="subtle"
-            size="xs"
-          />
-          <UBadge
-            :label="`Screen: ${getConnectionState(user.userId, 'desktop')}`"
-            :color="getStateColor(getConnectionState(user.userId, 'desktop'))"
-            variant="subtle"
-            size="xs"
+        <!-- Video streams using proper LiveKit track management -->
+        <div v-if="user.mediaState?.webcam" class="mt-2">
+          <VideoTrack
+            :track="liveKitRoom?.getVideoTrack(user.userId, 'camera')"
+            :participant-identity="user.userId"
+            :is-local="user.userId === liveKitRoom?.localParticipant.value?.identity"
+            class-name="w-full rounded bg-accented"
           />
         </div>
 
-        <!-- Video streams for this user -->
-        <div
-          v-for="stream in getUserStreams(user.userId)"
-          :key="`${user.userId}-${stream.type}`"
-          class=""
-        >
-          <UserVideoStream
-            :user-id="user.userId"
-            :user-name="user.userName"
-            :stream="stream.stream"
-            :stream-type="stream.type"
+        <div v-if="user.mediaState?.screen" class="mt-2">
+          <VideoTrack
+            :track="liveKitRoom?.getVideoTrack(user.userId, 'screen_share')"
+            :participant-identity="user.userId"
+            :is-local="user.userId === liveKitRoom?.localParticipant.value?.identity"
+            class-name="w-full rounded bg-accented"
           />
         </div>
+
+        <!-- Audio track (invisible but necessary for audio playback) -->
+        <!-- Don't render local participant's audio to prevent feedback -->
+        <VideoTrack
+          v-if="user.mediaState?.microphone && user.userId !== liveKitRoom?.localParticipant.value?.identity"
+          :track="liveKitRoom?.getAudioTrack(user.userId)"
+          :participant-identity="user.userId"
+          :is-local="false"
+          :muted="false"
+        />
       </div>
 
       <div
-        v-if="onlineUsers.length === 0"
+        v-if="sortedUsers.length === 0"
         class="text-center py-8 text-sm text-neutral-500"
       >
         No users online
@@ -105,7 +126,7 @@ const getStateColor = (state: string) => {
       <USeparator class="my-4" />
       <!-- Bot Management Section -->
       <div v-if="bots.length > 0" class="">
-        <div class="space-y-1">
+        <div class="space-y-4">
           <div
             v-for="bot in bots"
             :key="bot.name"

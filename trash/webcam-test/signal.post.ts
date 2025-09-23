@@ -1,8 +1,8 @@
 import type { StoredSignalMessage } from '../../../shared/types/webrtc'
-import { getScreenShareTestQueues } from '../../utils/globalStore'
+import { getWebcamTestQueues } from '../../utils/globalStore'
 
 // Share message queue across endpoints using global
-const messageQueues = getScreenShareTestQueues()
+const messageQueues = getWebcamTestQueues()
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -36,8 +36,6 @@ export default defineEventHandler(async (event) => {
   const cutoff = Date.now() - 30000
   const filtered = queue.filter((msg: StoredSignalMessage) => msg.timestamp > cutoff)
   messageQueues.set(roomId, filtered)
-
-  console.log(`[ScreenShareTest] Signal ${type} from ${senderId} in room ${roomId}`)
 
   return { success: true }
 })

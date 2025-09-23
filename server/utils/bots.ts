@@ -20,9 +20,10 @@ export const calculateInterjectionProbability = (userCount: number, shyness: num
   return baseProbability * (1 - shyness)
 }
 
-// Use the auto-generated type from Nuxt Content with required shyness field
-export interface BotConfig extends BotsCollectionItem {
+// Use the auto-generated type from Nuxt Content with required shyness field and mutable arrays
+export interface BotConfig extends Omit<BotsCollectionItem, 'triggers'> {
   shyness: number // Make shyness required (not optional)
+  triggers: string[] // Make triggers mutable
 }
 
 // Cache loaded bots to avoid repeated queries
@@ -32,72 +33,59 @@ const CACHE_DURATION = 60000 // 1 minute cache
 
 // Load bots directly from content
 export async function loadBots(event?: H3Event): Promise<BotConfig[]> {
-  console.log('[BOTS UTILS] loadBots called, event present:', !!event)
   try {
     // Use cache if still valid
     if (cachedBots && Date.now() - cacheTimestamp < CACHE_DURATION) {
-      console.log('[BOTS UTILS] Returning cached bots:', cachedBots.length)
       return cachedBots
     }
 
     // If we have an event context, use queryCollection directly
     if (event) {
-      console.log('[BOTS UTILS] Using queryCollection with event')
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore - queryCollection expects 1 arg but needs 2 in server context
       const bots = await queryCollection(event, 'bots').all()
-      console.log('[BOTS UTILS] QueryCollection returned:', bots.length, 'bots')
       const botConfigs = bots.map((bot: BotsCollectionItem) => ({
         ...bot,
-        shyness: bot.shyness ?? 0.5
+        shyness: bot.shyness ?? 0.5,
+        triggers: [...bot.triggers] // Make triggers mutable
       }))
       cachedBots = botConfigs
       cacheTimestamp = Date.now()
-      console.log('[BOTS UTILS] Cached bots updated')
       return botConfigs
     }
 
     // Fallback: use cached data or return empty
-    console.log('[BOTS UTILS] No event context, returning cached or empty')
     return cachedBots || []
   } catch (error) {
-    console.error('[BOTS UTILS] Error loading bots:', error)
+    console.error('[bots] Failed to load bots:', error)
     return cachedBots || []
   }
 }
 
 export async function findBotByTrigger(message: string, event?: H3Event): Promise<BotConfig | null> {
-  console.log('[BOTS UTILS] findBotByTrigger called for message:', message)
   const bots = await loadBots(event)
-  console.log('[BOTS UTILS] Checking', bots.length, 'bots for triggers')
 
   for (const bot of bots) {
     const regex = new RegExp(`\\b(${bot.triggers.join('|')})\\b`, 'i')
     if (regex.test(message)) {
-      console.log('[BOTS UTILS] Found matching bot:', bot.name)
       return bot
     }
   }
 
-  console.log('[BOTS UTILS] No bot trigger matched')
   return null
 }
 
 export async function findAllBotsByTrigger(message: string, event?: H3Event): Promise<BotConfig[]> {
-  console.log('[BOTS UTILS] findAllBotsByTrigger called for message:', message)
   const bots = await loadBots(event)
-  console.log('[BOTS UTILS] Checking', bots.length, 'bots for triggers')
   const mentionedBots: BotConfig[] = []
 
   for (const bot of bots) {
     const regex = new RegExp(`\\b(${bot.triggers.join('|')})\\b`, 'i')
     if (regex.test(message)) {
-      console.log('[BOTS UTILS] Found matching bot:', bot.name)
       mentionedBots.push(bot)
     }
   }
 
-  console.log('[BOTS UTILS] Total bots matched:', mentionedBots.length)
   return mentionedBots
 }
 

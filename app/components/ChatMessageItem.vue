@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ChatMessage } from '~/composables/useChatState'
+import type { ChatMessage } from '~/composables/useLiveKitChatState'
 import { useTimeAgo } from '@vueuse/core'
 
 const props = defineProps<{
@@ -10,7 +10,7 @@ const { clientId } = useUser()
 
 const isOwnMessage = computed(() => props.message.userId === clientId.value)
 const isSystemMessage = computed(() => props.message.type === 'system')
-const isAIMessage = computed(() => props.message.type === 'ai')
+const isAIMessage = computed(() => props.message.type === 'bot')
 
 // Use timeAgo for relative time display
 const timeAgo = useTimeAgo(props.message.timestamp)

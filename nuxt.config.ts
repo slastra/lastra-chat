@@ -28,8 +28,12 @@ export default defineNuxtConfig({
     // Private keys that are only available server-side
     geminiApiKey: process.env.GEMINI_API_KEY || '',
     geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
+    livekitKey: process.env.LIVEKIT_KEY || '',
+    livekitSecret: process.env.LIVEKIT_SECRET || '',
     // Public keys that are exposed to the client
-    public: {}
+    public: {
+      livekitUrl: process.env.LIVEKIT_URL || 'ws://localhost:7880'
+    }
   },
 
   experimental: {
@@ -37,13 +41,6 @@ export default defineNuxtConfig({
   },
 
   compatibilityDate: '2024-07-11',
-
-  nitro: {
-    experimental: {
-      openAPI: true,
-      websocket: true
-    }
-  },
 
   vite: {
     $server: {

@@ -1,36 +1,50 @@
 <script setup lang="ts">
-import type { SignalingMessage } from '../../shared/types/webrtc'
-
 definePageMeta({
   middleware: 'auth'
 })
 
 const { loadBots } = useBots()
+const { clientId, userName } = useUser()
 
-// Create all composables in setup context (synchronous)
-const ws = useWebSocketChat()
-const mediaStream = useMediaStream(ws)
-const chat = useChat(ws)
 const isReady = ref(false)
 
-// Create handler functions to maintain reference
-const handleWebRTCSignal = (data: unknown) => {
-  mediaStream.handleSignalingMessage(data as SignalingMessage)
+// Initialize LiveKit room
+const liveKitRoom = useLiveKitRoom({
+  roomName: 'main-chat-room',
+  participantName: userName.value || 'Anonymous',
+  participantMetadata: {
+    userId: clientId.value
+  },
+  autoConnect: false
+})
+
+// Initialize LiveKit chat
+const liveKitChat = useLiveKitChat({
+  room: liveKitRoom.room,
+  userId: clientId.value,
+  userName: userName.value || 'Anonymous'
+})
+
+// Initialize LiveKit bot integration
+const liveKitBots = useLiveKitBots({
+  liveKitChat,
+  liveKitRoom,
+  userId: clientId.value,
+  userName: userName.value || 'Anonymous'
+})
+
+// Legacy chat compatibility layer for remaining components
+const legacyChat = {
+  clearUser: () => {
+    // Handle user logout
+  }
 }
 
-const handleUserList = () => {
-  // Check for media connections after user list updates
-  setTimeout(() => {
-    mediaStream.checkAndConnectToExistingMedia()
-  }, 100)
-}
-
-// Register WebRTC handlers in setup context
-ws.on('webrtc-signal', handleWebRTCSignal)
-ws.on('user-list', handleUserList)
-
-// Provide chat instance to child components
-provide('chat', chat)
+// Provide instances to child components
+provide('liveKitRoom', liveKitRoom)
+provide('liveKitChat', liveKitChat)
+provide('liveKitBots', liveKitBots)
+provide('chat', legacyChat)
 
 onMounted(async () => {
   // Middleware handles auth, safe to proceed
@@ -38,32 +52,75 @@ onMounted(async () => {
   // Load bots first
   await loadBots()
 
-  // Initialize chat (which will connect WebSocket)
-  isReady.value = chat.initialize()
+  // Set up system message listeners for participant events
+  liveKitRoom.on('participantConnected', (participant) => {
+    const p = participant as { name?: string, identity: string }
+    const name = p.name || p.identity
+    liveKitChat.addLocalSystemMessage(`${name} joined the chat`)
+  })
+
+  liveKitRoom.on('participantDisconnected', (participant) => {
+    const p = participant as { name?: string, identity: string }
+    const name = p.name || p.identity
+    liveKitChat.addLocalSystemMessage(`${name} left the chat`)
+  })
+
+  try {
+    // Connect to LiveKit room
+    await liveKitRoom.connect()
+    isReady.value = true
+  } catch (error) {
+    console.error('[Chat] Failed to connect to LiveKit:', error)
+    // Connection error handling - user will see disconnected status
+    isReady.value = false
+  }
 })
 
-onUnmounted(() => {
-  // Clean up handlers
-  ws.off('webrtc-signal', handleWebRTCSignal)
-  ws.off('user-list', handleUserList)
-  chat.cleanup()
+onUnmounted(async () => {
+  await liveKitRoom.disconnect()
 })
 
 // Handle media control events
-const handleWebcamToggle = (_enabled: boolean) => {
-  mediaStream.toggleWebcam()
+const handleWebcamToggle = async () => {
+  try {
+    await liveKitRoom.enableCamera(!liveKitRoom.isCameraEnabled.value)
+  } catch (error) {
+    console.error('[Chat] Failed to toggle camera:', error)
+  }
 }
 
-const handleMicToggle = (_enabled: boolean) => {
-  mediaStream.toggleMic()
+const handleMicToggle = async () => {
+  try {
+    await liveKitRoom.enableMicrophone(!liveKitRoom.isMicrophoneEnabled.value)
+  } catch (error) {
+    console.error('[Chat] Failed to toggle microphone:', error)
+  }
 }
 
-const handleScreenToggle = (_enabled: boolean) => {
-  mediaStream.toggleScreen()
+const handleScreenToggle = async () => {
+  try {
+    await liveKitRoom.enableScreenShare(!liveKitRoom.isScreenShareEnabled.value)
+  } catch (error) {
+    console.error('[Chat] Failed to toggle screen share:', error)
+  }
 }
 
-const handleDeviceChange = (_type: 'video' | 'audio', _deviceId: string) => {
-  // Handle device change if needed
+const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutput', deviceId: string) => {
+  try {
+    switch (type) {
+      case 'audioInput':
+        await liveKitRoom.switchMicrophone(deviceId)
+        break
+      case 'videoInput':
+        await liveKitRoom.switchCamera(deviceId)
+        break
+      case 'audioOutput':
+        await liveKitRoom.switchSpeaker(deviceId)
+        break
+    }
+  } catch (error) {
+    console.error(`[Chat] Failed to change ${type} device:`, error)
+  }
 }
 </script>
 
@@ -83,7 +140,7 @@ const handleDeviceChange = (_type: 'video' | 'audio', _deviceId: string) => {
             Online Users
           </h3>
           <UBadge
-            :label="String(chat.onlineUsers.value.length)"
+            :label="String(liveKitRoom.participantCount.value)"
             color="success"
             variant="subtle"
           />
@@ -96,16 +153,33 @@ const handleDeviceChange = (_type: 'video' | 'audio', _deviceId: string) => {
 
       <template #footer>
         <div class="w-full py-4">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2 text-sm">
-              <UIcon name="i-lucide-user" class="w-4 h-4" />
-              <span class="font-medium">{{ chat.userName.value }}</span>
+          <StreamingMenu
+            :webcam-enabled="liveKitRoom.isCameraEnabled.value"
+            :mic-enabled="liveKitRoom.isMicrophoneEnabled.value"
+            :screen-enabled="liveKitRoom.isScreenShareEnabled.value"
+            :supports-speaker-selection="liveKitRoom.supportsSpeakerSelection.value"
+            :selected-camera="liveKitRoom.selectedCamera.value ?? undefined"
+            :selected-microphone="liveKitRoom.selectedMicrophone.value ?? undefined"
+            :selected-speaker="liveKitRoom.selectedSpeaker.value ?? undefined"
+            @webcam-toggle="handleWebcamToggle"
+            @mic-toggle="handleMicToggle"
+            @screen-toggle="handleScreenToggle"
+            @device-change="handleDeviceChange"
+          />
+          <!-- Audio Level Display -->
+          <div
+            v-if="liveKitRoom.isMicrophoneEnabled.value"
+            class="mt-3 space-y-1"
+          >
+            <div class="flex items-center justify-between text-xs text-muted">
+              <span>Audio Level</span>
+              <span>{{ liveKitRoom.audioLevel.value }}%</span>
             </div>
-            <MediaControls
-              @webcam-toggle="handleWebcamToggle"
-              @mic-toggle="handleMicToggle"
-              @screen-toggle="handleScreenToggle"
-              @device-change="handleDeviceChange"
+            <UProgress
+              :model-value="liveKitRoom.audioLevel.value"
+              :max="100"
+              size="sm"
+              :color="liveKitRoom.audioLevel.value > 80 ? 'error' : liveKitRoom.audioLevel.value > 50 ? 'warning' : 'primary'"
             />
           </div>
         </div>
@@ -117,8 +191,8 @@ const handleDeviceChange = (_type: 'video' | 'audio', _deviceId: string) => {
         <UDashboardNavbar title="Lastra Chat">
           <template #right>
             <div class="flex items-center gap-3">
-              <UBadge :color="chat.connectionStatus.value === 'connected' ? 'success' : chat.connectionStatus.value === 'connecting' ? 'warning' : 'error'" variant="subtle">
-                {{ chat.connectionStatus.value }}
+              <UBadge :color="liveKitRoom.isConnected.value ? 'success' : liveKitRoom.isConnecting.value ? 'warning' : 'error'" variant="subtle">
+                {{ liveKitRoom.isConnected.value ? 'connected' : liveKitRoom.isConnecting.value ? 'connecting' : 'disconnected' }}
               </UBadge>
 
               <!-- Sound Settings Popover -->
@@ -140,7 +214,7 @@ const handleDeviceChange = (_type: 'video' | 'audio', _deviceId: string) => {
                 color="neutral"
                 variant="ghost"
                 icon="i-lucide-log-out"
-                @click="() => { chat.clearUser(); navigateTo('/') }"
+                @click="async () => { await liveKitRoom.disconnect(); legacyChat.clearUser(); navigateTo('/') }"
               />
             </div>
           </template>
@@ -161,7 +235,7 @@ const handleDeviceChange = (_type: 'video' | 'audio', _deviceId: string) => {
   </UDashboardGroup>
   <div v-else class="flex items-center justify-center h-screen">
     <UCard>
-      <p>Redirecting to login...</p>
+      <p>Just a moment...</p>
     </UCard>
   </div>
 </template>

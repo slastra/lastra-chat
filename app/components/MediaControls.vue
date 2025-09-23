@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { useDevicesList } from '@vueuse/core'
 
+const props = defineProps<{
+  webcamEnabled: boolean
+  micEnabled: boolean
+  screenEnabled: boolean
+}>()
+
 const emit = defineEmits<{
-  webcamToggle: [enabled: boolean]
-  micToggle: [enabled: boolean]
-  screenToggle: [enabled: boolean]
+  webcamToggle: []
+  micToggle: []
+  screenToggle: []
   deviceChange: [type: 'video' | 'audio', deviceId: string]
 }>()
 
@@ -16,10 +22,7 @@ const {
   requestPermissions: false
 })
 
-// Media states
-const webcamEnabled = ref(false)
-const micEnabled = ref(false)
-const screenEnabled = ref(false)
+// Use props for media states instead of local refs
 
 // Selected devices
 const selectedCamera = ref<string>('')
@@ -40,20 +43,17 @@ const microphoneOptions = computed(() =>
   }))
 )
 
-// Toggle functions
+// Toggle functions - just emit events, parent controls state
 const toggleWebcam = () => {
-  webcamEnabled.value = !webcamEnabled.value
-  emit('webcamToggle', webcamEnabled.value)
+  emit('webcamToggle')
 }
 
 const toggleMic = () => {
-  micEnabled.value = !micEnabled.value
-  emit('micToggle', micEnabled.value)
+  emit('micToggle')
 }
 
 const toggleScreen = () => {
-  screenEnabled.value = !screenEnabled.value
-  emit('screenToggle', screenEnabled.value)
+  emit('screenToggle')
 }
 
 // Device selection
@@ -96,9 +96,9 @@ onMounted(() => {
       :disabled="cameraOptions.length === 0"
     >
       <UButton
-        :color="webcamEnabled ? 'primary' : 'neutral'"
-        :variant="webcamEnabled ? 'solid' : 'ghost'"
-        :icon="webcamEnabled ? 'i-lucide-video' : 'i-lucide-video-off'"
+        :color="props.webcamEnabled ? 'primary' : 'neutral'"
+        :variant="props.webcamEnabled ? 'solid' : 'ghost'"
+        :icon="props.webcamEnabled ? 'i-lucide-video' : 'i-lucide-video-off'"
         size="sm"
         square
         @click="toggleWebcam"
@@ -121,9 +121,9 @@ onMounted(() => {
       :disabled="microphoneOptions.length === 0"
     >
       <UButton
-        :color="micEnabled ? 'primary' : 'neutral'"
-        :variant="micEnabled ? 'solid' : 'ghost'"
-        :icon="micEnabled ? 'i-lucide-mic' : 'i-lucide-mic-off'"
+        :color="props.micEnabled ? 'primary' : 'neutral'"
+        :variant="props.micEnabled ? 'solid' : 'ghost'"
+        :icon="props.micEnabled ? 'i-lucide-mic' : 'i-lucide-mic-off'"
         size="sm"
         square
         @click="toggleMic"
@@ -132,9 +132,9 @@ onMounted(() => {
 
     <!-- Screen Share Control -->
     <UButton
-      :color="screenEnabled ? 'primary' : 'neutral'"
-      :variant="screenEnabled ? 'solid' : 'ghost'"
-      :icon="screenEnabled ? 'i-lucide-monitor-up' : 'i-lucide-monitor'"
+      :color="props.screenEnabled ? 'primary' : 'neutral'"
+      :variant="props.screenEnabled ? 'solid' : 'ghost'"
+      :icon="props.screenEnabled ? 'i-lucide-monitor-up' : 'i-lucide-monitor'"
       size="sm"
       square
       @click="toggleScreen"
