@@ -9,6 +9,7 @@ interface Props {
   autoplay?: boolean
   playsinline?: boolean
   className?: string
+  clickable?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -16,8 +17,13 @@ const props = withDefaults(defineProps<Props>(), {
   muted: true,
   autoplay: true,
   playsinline: true,
-  className: 'w-full rounded bg-gray-900'
+  className: 'w-full rounded bg-default',
+  clickable: true
 })
+
+const emit = defineEmits<{
+  videoClick: [participantIdentity: string]
+}>()
 
 // Template refs for track attachment
 const videoRef = ref<HTMLVideoElement>()
@@ -73,6 +79,18 @@ watch(() => props.track, async (newTrack, oldTrack) => {
   }
 }, { immediate: false })
 
+// Re-attach track when component becomes visible again
+const reattachTrack = () => {
+  if (props.track && videoRef.value) {
+    attachTrack()
+  }
+}
+
+// Expose method for parent component to trigger re-attachment
+defineExpose({
+  reattachTrack
+})
+
 // Attach track when component is mounted and refs are available
 onMounted(() => {
   nextTick(() => {
@@ -91,6 +109,13 @@ onUnmounted(() => {
 const isVideoTrack = computed(() => props.track?.kind === 'video')
 const isAudioTrack = computed(() => props.track?.kind === 'audio')
 const hasTrack = computed(() => !!props.track)
+
+// Handle video click
+const handleVideoClick = () => {
+  if (props.clickable && isVideoTrack.value) {
+    emit('videoClick', props.participantIdentity)
+  }
+}
 </script>
 
 <template>
@@ -99,12 +124,13 @@ const hasTrack = computed(() => !!props.track)
     <video
       v-if="isVideoTrack"
       ref="videoRef"
-      :class="className"
+      :class="[className, { 'cursor-pointer hover:opacity-90 transition-opacity': clickable && isVideoTrack }]"
       :muted="muted"
       :autoplay="autoplay"
       :playsinline="playsinline"
       :data-participant="participantIdentity"
       :data-local="isLocal"
+      @click="handleVideoClick"
     />
 
     <!-- Audio element for audio tracks -->

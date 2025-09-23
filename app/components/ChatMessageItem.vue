@@ -75,19 +75,37 @@ const exactTime = computed(() => {
               : isAIMessage
                 ? 'bg-accented'
                 : 'bg-elevated',
-            'prose prose-sm max-w-none prose-p:leading-snug prose-li:leading-snug',
-            isOwnMessage ? 'prose-invert' : 'prose-gray dark:prose-invert',
+            'prose prose-sm max-w-none',
+            isOwnMessage ? 'prose-invert' : '',
+            // Prose text colors - use inverted for own messages
+            isOwnMessage
+              ? '[&_p]:text-inverted [&_li]:text-inverted [&_h1]:text-inverted [&_h2]:text-inverted [&_h3]:text-inverted [&_strong]:text-inverted [&_em]:text-inverted/80'
+              : '[&_p]:text-default [&_li]:text-default [&_h1]:text-emphasized [&_h2]:text-emphasized [&_h3]:text-emphasized [&_strong]:text-emphasized [&_em]:text-muted',
+            // Spacing
             '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
             '[&_p]:my-1 [&_p]:leading-snug',
-            '[&_pre]:bg-black/10 dark:[&_pre]:bg-white/10 [&_pre]:rounded [&_pre]:p-2 [&_pre]:my-2',
-            '[&_code]:bg-black/10 dark:[&_code]:bg-white/10 [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5',
+            '[&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:mt-2 [&_h3]:mb-1',
+            // Code blocks - inverted styles for own messages
+            isOwnMessage
+              ? '[&_pre]:bg-inverted/10 [&_pre]:border [&_pre]:border-inverted/20 [&_pre]:rounded [&_pre]:p-2 [&_pre]:my-2'
+              : '[&_pre]:bg-accented [&_pre]:border [&_pre]:border-accented [&_pre]:rounded [&_pre]:p-2 [&_pre]:my-2',
+            isOwnMessage
+              ? '[&_code]:bg-inverted/10 [&_code]:text-inverted [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5'
+              : '[&_code]:bg-accented [&_code]:text-default [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5',
             '[&_pre_code]:bg-transparent [&_pre_code]:p-0',
-            '[&_a]:underline [&_a]:decoration-dotted',
+            // Links - adjust for inverted background
+            isOwnMessage
+              ? '[&_a]:text-inverted [&_a]:underline [&_a]:decoration-dotted [&_a:hover]:decoration-solid'
+              : '[&_a]:text-primary [&_a]:underline [&_a]:decoration-dotted [&_a:hover]:decoration-solid',
+            // Lists
             '[&_ul]:list-disc [&_ul]:pl-4 [&_ul]:my-1',
             '[&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:my-1',
+            '[&_li]:leading-snug',
+            // Blockquotes - adjust for inverted background
             '[&_blockquote]:border-l-4 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-2',
-            '[&_blockquote]:border-gray-300 dark:[&_blockquote]:border-gray-600',
-            '[&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:mt-2 [&_h3]:mb-1'
+            isOwnMessage
+              ? '[&_blockquote]:border-inverted/30 [&_blockquote]:text-inverted/80'
+              : '[&_blockquote]:border-accented [&_blockquote]:text-muted'
           ]"
         >
           <MDC :value="message.content" />

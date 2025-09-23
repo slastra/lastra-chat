@@ -1,10 +1,27 @@
 <script setup lang="ts">
 import type { UseLiveKitRoomReturn } from '../composables/useLiveKitRoom'
 import type { UseLiveKitChatReturn } from '../composables/useLiveKitChat'
+import type { RemoteVideoTrack, LocalVideoTrack } from 'livekit-client'
+import type { ComponentPublicInstance } from 'vue'
+import { VideoQuality } from 'livekit-client'
 
 const liveKitRoom = inject('liveKitRoom') as UseLiveKitRoomReturn
 const liveKitChat = inject('liveKitChat') as UseLiveKitChatReturn
 const { bots, toggleBot, isBotEnabled } = useBots()
+
+// Fullscreen modal state
+const isFullscreenOpen = ref(false)
+const selectedVideoTrack = ref<RemoteVideoTrack | LocalVideoTrack | undefined>()
+const selectedParticipantName = ref('')
+const selectedParticipantIdentity = ref('')
+const selectedTrackType = ref<'webcam' | 'screen'>('webcam')
+
+// Track refs for video components
+interface VideoTrackInstance extends ComponentPublicInstance {
+  reattachTrack?: () => void
+}
+const webcamRefs = ref<Record<string, VideoTrackInstance | null>>({})
+const screenRefs = ref<Record<string, VideoTrackInstance | null>>({})
 
 const sortedUsers = computed(() => {
   const users = []
@@ -32,6 +49,49 @@ const sortedUsers = computed(() => {
       isTyping: liveKitChat?.typingUsers.value?.includes(user.name || user.identity) || false
     }))
     .sort((a, b) => a.userName.localeCompare(b.userName))
+})
+
+// Handle video click for fullscreen
+const handleVideoClick = (participantIdentity: string, trackType: 'webcam' | 'screen') => {
+  const user = sortedUsers.value.find(u => u.userId === participantIdentity)
+  if (!user) return
+
+  const track = trackType === 'screen'
+    ? liveKitRoom?.getVideoTrack(participantIdentity, 'screen_share')
+    : liveKitRoom?.getVideoTrack(participantIdentity, 'camera')
+
+  if (track) {
+    selectedVideoTrack.value = track
+    selectedParticipantName.value = user.userName
+    selectedParticipantIdentity.value = participantIdentity
+    selectedTrackType.value = trackType
+
+    // Request high quality video for fullscreen viewing
+    const source = trackType === 'screen' ? 'screen_share' : 'camera'
+    liveKitRoom?.setVideoQuality(participantIdentity, VideoQuality.HIGH, source)
+
+    isFullscreenOpen.value = true
+  }
+}
+
+// Re-attach video track to original element when modal closes
+watch(isFullscreenOpen, (isOpen) => {
+  if (!isOpen && selectedParticipantIdentity.value) {
+    // Restore video quality to LOW when closing fullscreen
+    const source = selectedTrackType.value === 'screen' ? 'screen_share' : 'camera'
+    liveKitRoom?.setVideoQuality(selectedParticipantIdentity.value, VideoQuality.LOW, source)
+
+    // Wait a tick for the modal to fully close
+    nextTick(() => {
+      const refs = selectedTrackType.value === 'screen' ? screenRefs.value : webcamRefs.value
+      const videoComponent = refs[selectedParticipantIdentity.value]
+
+      if (videoComponent?.reattachTrack) {
+        // Force re-attachment of the track to the original video element
+        videoComponent.reattachTrack()
+      }
+    })
+  }
 })
 </script>
 
@@ -90,19 +150,23 @@ const sortedUsers = computed(() => {
         <!-- Video streams using proper LiveKit track management -->
         <div v-if="user.mediaState?.webcam" class="mt-2">
           <VideoTrack
+            :ref="(el) => { if (el) webcamRefs[user.userId] = el as VideoTrackInstance }"
             :track="liveKitRoom?.getVideoTrack(user.userId, 'camera')"
             :participant-identity="user.userId"
             :is-local="user.userId === liveKitRoom?.localParticipant.value?.identity"
             class-name="w-full rounded bg-accented"
+            @video-click="() => handleVideoClick(user.userId, 'webcam')"
           />
         </div>
 
         <div v-if="user.mediaState?.screen" class="mt-2">
           <VideoTrack
+            :ref="(el) => { if (el) screenRefs[user.userId] = el as VideoTrackInstance }"
             :track="liveKitRoom?.getVideoTrack(user.userId, 'screen_share')"
             :participant-identity="user.userId"
             :is-local="user.userId === liveKitRoom?.localParticipant.value?.identity"
             class-name="w-full rounded bg-accented"
+            @video-click="() => handleVideoClick(user.userId, 'screen')"
           />
         </div>
 
@@ -149,5 +213,14 @@ const sortedUsers = computed(() => {
         </div>
       </div>
     </div>
+
+    <!-- Fullscreen Video Modal -->
+    <FullscreenVideoModal
+      v-model:is-open="isFullscreenOpen"
+      :track="selectedVideoTrack"
+      :participant-name="selectedParticipantName"
+      :participant-identity="selectedParticipantIdentity"
+      :track-type="selectedTrackType"
+    />
   </div>
 </template>

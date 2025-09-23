@@ -5,7 +5,8 @@ import {
   VideoPresets,
   ScreenSharePresets,
   ConnectionState,
-  ConnectionQuality
+  ConnectionQuality,
+  VideoQuality
 } from 'livekit-client'
 
 import type {
@@ -20,7 +21,8 @@ import type {
   LocalVideoTrack,
   RemoteAudioTrack,
   LocalAudioTrack,
-  Participant
+  Participant,
+  RemoteTrackPublication
 } from 'livekit-client'
 
 export interface UseLiveKitRoomOptions {
@@ -98,6 +100,8 @@ export interface UseLiveKitRoomReturn {
   getParticipantTracks: (participantIdentity: string) => LiveKitParticipant['tracks']
   getVideoTrack: (participantIdentity: string, source?: 'camera' | 'screen_share') => RemoteVideoTrack | LocalVideoTrack | undefined
   getAudioTrack: (participantIdentity: string) => RemoteAudioTrack | LocalAudioTrack | undefined
+  getVideoPublication: (participantIdentity: string, source?: 'camera' | 'screen_share') => RemoteTrackPublication | undefined
+  setVideoQuality: (participantIdentity: string, quality: VideoQuality, source?: 'camera' | 'screen_share') => void
 
   // Events
   on: (event: string, handler: (...args: unknown[]) => void) => void
@@ -139,6 +143,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
 
   // Participants state with tracks and connection quality
   const participantTracks = ref<Map<string, LiveKitParticipant['tracks']>>(new Map())
+  const participantPublications = ref<Map<string, Map<Track.Source, RemoteTrackPublication>>>(new Map())
   const participantConnectionQuality = ref<Map<string, ConnectionQuality>>(new Map())
   const participantAudioLevels = ref<Map<string, number>>(new Map())
 
@@ -229,12 +234,19 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       dynacast: true,
       disconnectOnPageLeave: false,
       publishDefaults: {
-        videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360, VideoPresets.h720],
-        screenShareSimulcastLayers: [ScreenSharePresets.h720fps15, ScreenSharePresets.h1080fps15],
+        // Enable higher quality video layers for better fullscreen viewing
+        videoSimulcastLayers: [VideoPresets.h360, VideoPresets.h540, VideoPresets.h720, VideoPresets.h1080],
+        screenShareSimulcastLayers: [ScreenSharePresets.h720fps15, ScreenSharePresets.h1080fps15, ScreenSharePresets.h1080fps30],
+        videoCodec: 'vp9', // VP9 provides better quality at same bitrate
         audioPreset: {
           maxBitrate: 20_000,
           priority: 'high'
         }
+      },
+      // Request higher quality video by default
+      videoCaptureDefaults: {
+        resolution: VideoPresets.h720.resolution,
+        facingMode: 'user'
       }
     })
 
@@ -274,12 +286,24 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     newRoom.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
       // Remove from reactive participant list
       remoteParticipantIdentities.value.delete(participant.identity)
+      // Clean up publications
+      participantPublications.value.delete(participant.identity)
       emitEvent('participantDisconnected', participant)
     })
 
     // Track events
     newRoom.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: TrackPublication, participant: RemoteParticipant) => {
       updateParticipantTracks(participant.identity, track, publication.source, 'add')
+
+      // Store the publication for quality control
+      if (publication.kind === Track.Kind.Video) {
+        if (!participantPublications.value.has(participant.identity)) {
+          participantPublications.value.set(participant.identity, new Map())
+        }
+        const pubMap = participantPublications.value.get(participant.identity)!
+        pubMap.set(publication.source, publication as RemoteTrackPublication)
+      }
+
       setupAudioLevelMonitoring(track, participant.identity)
       emitEvent('trackSubscribed', track, publication, participant)
     })
@@ -659,6 +683,25 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     return tracks.microphone
   }
 
+  function getVideoPublication(participantIdentity: string, source: 'camera' | 'screen_share' = 'camera'): RemoteTrackPublication | undefined {
+    const pubMap = participantPublications.value.get(participantIdentity)
+    if (!pubMap) return undefined
+    const sourceKey = source === 'camera' ? Track.Source.Camera : Track.Source.ScreenShare
+    return pubMap.get(sourceKey) as RemoteTrackPublication | undefined
+  }
+
+  function setVideoQuality(participantIdentity: string, quality: VideoQuality, source: 'camera' | 'screen_share' = 'camera'): void {
+    const publication = getVideoPublication(participantIdentity, source)
+    if (publication && 'setVideoQuality' in publication) {
+      try {
+        publication.setVideoQuality(quality)
+        console.log(`[LiveKitRoom] Set video quality to ${VideoQuality[quality]} for ${participantIdentity} ${source}`)
+      } catch (error) {
+        console.error('[LiveKitRoom] Failed to set video quality:', error)
+      }
+    }
+  }
+
   // Auto-connect if requested
   if (options.autoConnect) {
     onMounted(() => {
@@ -721,6 +764,8 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     getParticipantTracks,
     getVideoTrack,
     getAudioTrack,
+    getVideoPublication,
+    setVideoQuality,
 
     // Events
     on,
