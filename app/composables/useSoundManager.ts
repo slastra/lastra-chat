@@ -12,13 +12,13 @@ export type SoundConfig = {
 }
 
 const DEFAULT_SOUND_CONFIG: SoundConfig = {
-  messageReceived: 'bong_001.ogg',
-  messageSent: 'click_001.ogg',
-  aiResponse: 'pluck_001.ogg',
-  userJoined: 'open_001.ogg',
-  userLeft: 'close_001.ogg',
-  error: 'error_001.ogg',
-  notification: 'confirmation_001.ogg'
+  messageReceived: 'bong.ogg',
+  messageSent: 'click.ogg',
+  aiResponse: 'pluck.ogg',
+  userJoined: 'open.ogg',
+  userLeft: 'close.ogg',
+  error: 'error.ogg',
+  notification: 'confirmation.ogg'
 }
 
 export const useSoundManager = () => {
@@ -45,7 +45,7 @@ export const useSoundManager = () => {
   // Test if audio can be played (for autoplay policy detection)
   const testAudioPlayback = async () => {
     try {
-      const testAudio = new Audio('/sounds/tick_001.ogg')
+      const testAudio = new Audio('/sounds/tick.ogg')
       testAudio.volume = 0.01
       await testAudio.play()
       testAudio.pause()

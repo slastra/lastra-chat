@@ -68,8 +68,11 @@ export async function sendChatNotification(
   message: string,
   type: 'user' | 'ai' | 'system' = 'user'
 ) {
-  // Block notifications from specific users and bots
-  if (userName.toLowerCase() === 'shaun' || type === 'ai') {
+  const runtimeConfig = useRuntimeConfig()
+  const myUsername = runtimeConfig.myUsername
+
+  // Block notifications from configured user and bots
+  if ((myUsername && userName.toLowerCase() === myUsername.toLowerCase()) || type === 'ai') {
     return
   }
 
@@ -94,7 +97,6 @@ export async function sendChatNotification(
   }
 
   // Get site URL from environment variable or use fallback
-  const runtimeConfig = useRuntimeConfig()
   const siteUrl = runtimeConfig.public.siteUrl || 'https://lastra.us'
   const iconUrl = `${siteUrl}/favicon-32x32.png`
 

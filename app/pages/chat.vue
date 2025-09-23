@@ -57,12 +57,18 @@ onMounted(async () => {
     const p = participant as { name?: string, identity: string }
     const name = p.name || p.identity
     liveKitChat.addLocalSystemMessage(`${name} joined the chat`)
+    // Play join sound for other users
+    const { playSound } = useSoundManager()
+    playSound('userJoined')
   })
 
   liveKitRoom.on('participantDisconnected', (participant) => {
     const p = participant as { name?: string, identity: string }
     const name = p.name || p.identity
     liveKitChat.addLocalSystemMessage(`${name} left the chat`)
+    // Play leave sound for other users
+    const { playSound } = useSoundManager()
+    playSound('userLeft')
   })
 
   try {

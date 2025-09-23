@@ -135,6 +135,17 @@ export function useLiveKitChat(options: UseLiveKitChatOptions): UseLiveKitChatRe
     // Add regular messages to history
     addMessageToHistory(message)
 
+    // Play sound for incoming messages (not for own messages or system messages)
+    if (message.userId !== userId && message.type !== 'system') {
+      const { playSound } = useSoundManager()
+      // Play aiResponse sound for bot messages, messageReceived sound for user messages
+      if (message.type === 'bot') {
+        playSound('aiResponse')
+      } else {
+        playSound('messageReceived')
+      }
+    }
+
     // Emit specific events based on message type
     if (message.type === 'bot') {
       emitEvent('botMessage', message)
@@ -184,6 +195,20 @@ export function useLiveKitChat(options: UseLiveKitChatOptions): UseLiveKitChatRe
 
     // Add to local history immediately (sender doesn't receive their own data messages)
     addMessageToHistory(message)
+
+    // Send notification for user messages (not bot or system messages)
+    if (type === 'message') {
+      // Fire and forget - don't wait for notification to complete
+      $fetch('/api/notify', {
+        method: 'POST',
+        body: {
+          userName,
+          message: content
+        }
+      }).catch(() => {
+        // Silently ignore notification errors
+      })
+    }
 
     // Send via reliable data channel
     const encodedMessage = encodeMessage(message)

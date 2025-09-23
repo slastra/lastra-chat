@@ -66,6 +66,9 @@ export default defineEventHandler(async (event) => {
     // DON'T add current message to recentMessages - it will be passed separately
     // recentMessages.push(currentMessage) // REMOVED - this was causing duplication
 
+    // Note: Notification is sent from the client via /api/notify for all messages
+    // No need to send notification here as it would create duplicates
+
     const response = await generateBotResponse({
       bot,
       message: currentMessage,

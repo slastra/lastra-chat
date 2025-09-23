@@ -30,9 +30,13 @@ export default defineNuxtConfig({
     geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
     livekitKey: process.env.LIVEKIT_KEY || '',
     livekitSecret: process.env.LIVEKIT_SECRET || '',
+    myUsername: process.env.MY_USERNAME || '',
+    ntfyUrl: process.env.NTFY_URL || '',
+    ntfyTopic: process.env.NTFY_TOPIC || '',
     // Public keys that are exposed to the client
     public: {
-      livekitUrl: process.env.LIVEKIT_URL || 'ws://localhost:7880'
+      livekitUrl: process.env.LIVEKIT_URL || 'ws://localhost:7880',
+      siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://lastra.us'
     }
   },
 

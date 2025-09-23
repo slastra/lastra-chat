@@ -5,8 +5,7 @@ import {
   VideoPresets,
   ScreenSharePresets,
   ConnectionState,
-  ConnectionQuality,
-  VideoQuality
+  ConnectionQuality
 } from 'livekit-client'
 
 import type {
@@ -22,7 +21,8 @@ import type {
   RemoteAudioTrack,
   LocalAudioTrack,
   Participant,
-  RemoteTrackPublication
+  RemoteTrackPublication,
+  VideoQuality
 } from 'livekit-client'
 
 export interface UseLiveKitRoomOptions {
@@ -172,9 +172,9 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       identity: participant.identity,
       name: participant.name || options.participantName,
       metadata: participant.metadata ? JSON.parse(participant.metadata) : options.participantMetadata,
-      isCameraEnabled: !!tracks.camera,
-      isMicrophoneEnabled: !!tracks.microphone,
-      isScreenShareEnabled: !!tracks.screenShare,
+      isCameraEnabled: participant.isCameraEnabled,
+      isMicrophoneEnabled: participant.isMicrophoneEnabled,
+      isScreenShareEnabled: participant.isScreenShareEnabled,
       audioLevel: audioLevel.value,
       connectionQuality: 'excellent', // Local participant always has excellent quality
       tracks: tracks as {
@@ -208,9 +208,9 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
         identity: participant.identity,
         name: participant.name || participant.identity,
         metadata: participant.metadata ? JSON.parse(participant.metadata) : {},
-        isCameraEnabled: !!tracks.camera,
-        isMicrophoneEnabled: !!tracks.microphone,
-        isScreenShareEnabled: !!tracks.screenShare,
+        isCameraEnabled: participant.isCameraEnabled,
+        isMicrophoneEnabled: participant.isMicrophoneEnabled,
+        isScreenShareEnabled: participant.isScreenShareEnabled,
         audioLevel,
         connectionQuality,
         tracks: tracks as {
@@ -310,20 +310,30 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
 
     // Track mute events - handle camera enable/disable without unpublish
     newRoom.on(RoomEvent.TrackMuted, (publication: TrackPublication, participant: Participant) => {
-      // For video tracks that are muted (camera disabled), remove from tracks map
-      if (publication.kind === Track.Kind.Video && publication.track) {
+      // Handle camera tracks - remove from map when muted
+      if (publication.kind === Track.Kind.Video && publication.track && publication.source === Track.Source.Camera) {
         updateParticipantTracks(participant.identity, publication.track as RemoteTrack | LocalVideoTrack, publication.source, 'remove')
+      } else if (publication.kind === Track.Kind.Audio && publication.track) {
+        // Handle audio tracks - trigger reactive update without removing track
+        // Force a reactive update by recreating the tracks object
+        const tracks = participantTracks.value.get(participant.identity) || {}
+        participantTracks.value.set(participant.identity, { ...tracks })
       }
       emitEvent('trackMuted', publication, participant)
     })
 
     newRoom.on(RoomEvent.TrackUnmuted, (publication: TrackPublication, participant: Participant) => {
-      // For video tracks that are unmuted (camera enabled), add to tracks map
-      if (publication.kind === Track.Kind.Video && publication.track) {
+      // Handle camera tracks - add back to map when unmuted
+      if (publication.kind === Track.Kind.Video && publication.track && publication.source === Track.Source.Camera) {
         updateParticipantTracks(participant.identity, publication.track as RemoteTrack | LocalVideoTrack, publication.source, 'add')
         if (participant === newRoom.localParticipant) {
           setupAudioLevelMonitoring(publication.track as LocalVideoTrack, participant.identity)
         }
+      } else if (publication.kind === Track.Kind.Audio && publication.track) {
+        // Handle audio tracks - trigger reactive update without modifying track
+        // Force a reactive update by recreating the tracks object
+        const tracks = participantTracks.value.get(participant.identity) || {}
+        participantTracks.value.set(participant.identity, { ...tracks })
       }
       emitEvent('trackUnmuted', publication, participant)
     })
@@ -398,26 +408,26 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     source: string,
     action: 'add' | 'remove'
   ) {
-    let currentTracks = participantTracks.value.get(participantIdentity) || {}
+    const currentTracks = participantTracks.value.get(participantIdentity) || {}
+    // Always create a new object for Vue reactivity
+    const newTracks = { ...currentTracks }
 
     if (action === 'add') {
       if (track.kind === Track.Kind.Video) {
         if (source === 'camera') {
-          currentTracks.camera = track as RemoteVideoTrack | LocalVideoTrack
+          newTracks.camera = track as RemoteVideoTrack | LocalVideoTrack
         } else if (source === 'screen_share') {
-          currentTracks.screenShare = track as RemoteVideoTrack | LocalVideoTrack
+          newTracks.screenShare = track as RemoteVideoTrack | LocalVideoTrack
         }
       } else if (track.kind === Track.Kind.Audio) {
         if (source === 'microphone') {
-          currentTracks.microphone = track as RemoteAudioTrack | LocalAudioTrack
+          newTracks.microphone = track as RemoteAudioTrack | LocalAudioTrack
         } else if (source === 'screen_share_audio') {
-          currentTracks.screenShareAudio = track as RemoteAudioTrack | LocalAudioTrack
+          newTracks.screenShareAudio = track as RemoteAudioTrack | LocalAudioTrack
         }
       }
     } else {
-      // Remove track - create new object for Vue reactivity
-      const newTracks = { ...currentTracks }
-
+      // Remove track
       if (track.kind === Track.Kind.Video) {
         if (source === 'camera') {
           delete newTracks.camera
@@ -431,11 +441,9 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
           delete newTracks.screenShareAudio
         }
       }
-
-      currentTracks = newTracks
     }
 
-    participantTracks.value.set(participantIdentity, currentTracks)
+    participantTracks.value.set(participantIdentity, newTracks)
   }
 
   // Setup audio level monitoring
@@ -695,7 +703,6 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     if (publication && 'setVideoQuality' in publication) {
       try {
         publication.setVideoQuality(quality)
-        console.log(`[LiveKitRoom] Set video quality to ${VideoQuality[quality]} for ${participantIdentity} ${source}`)
       } catch (error) {
         console.error('[LiveKitRoom] Failed to set video quality:', error)
       }

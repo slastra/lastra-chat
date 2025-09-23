@@ -17,7 +17,7 @@ const props = withDefaults(defineProps<Props>(), {
   muted: true,
   autoplay: true,
   playsinline: true,
-  className: 'w-full rounded bg-default',
+  className: 'w-full rounded bg-black',
   clickable: true
 })
 
@@ -119,7 +119,7 @@ const handleVideoClick = () => {
 </script>
 
 <template>
-  <div class="relative">
+  <div class=" ">
     <!-- Video element for video tracks -->
     <video
       v-if="isVideoTrack"

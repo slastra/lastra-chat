@@ -10,13 +10,13 @@ const DEFAULT_SETTINGS: SoundSettings = {
   enabled: true,
   volume: 0.7,
   soundConfig: {
-    messageReceived: 'bong_001.ogg',
-    messageSent: 'click_001.ogg',
-    aiResponse: 'pluck_001.ogg',
-    userJoined: 'open_001.ogg',
-    userLeft: 'close_001.ogg',
-    error: 'error_001.ogg',
-    notification: 'confirmation_001.ogg'
+    messageReceived: 'bong.ogg',
+    messageSent: 'click.ogg',
+    aiResponse: 'pluck.ogg',
+    userJoined: 'open.ogg',
+    userLeft: 'close.ogg',
+    error: 'error.ogg',
+    notification: 'confirmation.ogg'
   }
 }
 
@@ -107,26 +107,26 @@ export const useSoundSettings = () => {
 
   // Available sound files (based on what's in the public/sounds directory)
   const availableSounds = [
-    'back_001.ogg',
-    'bong_001.ogg',
-    'click_001.ogg',
-    'close_001.ogg',
-    'confirmation_001.ogg',
-    'drop_001.ogg',
-    'error_001.ogg',
-    'glass_001.ogg',
-    'glitch_001.ogg',
-    'maximize_001.ogg',
-    'minimize_001.ogg',
-    'open_001.ogg',
-    'pluck_001.ogg',
-    'question_001.ogg',
-    'scratch_001.ogg',
-    'scroll_001.ogg',
-    'select_001.ogg',
-    'switch_001.ogg',
-    'tick_001.ogg',
-    'toggle_001.ogg'
+    'back.ogg',
+    'bong.ogg',
+    'click.ogg',
+    'close.ogg',
+    'confirmation.ogg',
+    'drop.ogg',
+    'error.ogg',
+    'glass.ogg',
+    'glitch.ogg',
+    'maximize.ogg',
+    'minimize.ogg',
+    'open.ogg',
+    'pluck.ogg',
+    'question.ogg',
+    'scratch.ogg',
+    'scroll.ogg',
+    'select.ogg',
+    'switch.ogg',
+    'tick.ogg',
+    'toggle.ogg'
   ]
 
   // Watch for changes and auto-save

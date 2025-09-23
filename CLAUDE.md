@@ -296,7 +296,18 @@ LIVEKIT_URL=ws://localhost:7880  # LiveKit server URL (dev mode)
 
 ### Recent Improvements
 
+**New Features (Session Updates):**
+- ✅ **Fullscreen Video Modal**: Click any video stream to view in fullscreen with automatic quality scaling
+- ✅ **Dynamic Video Quality Control**: Uses LiveKit's `setVideoQuality()` API for 1080p in fullscreen, low quality otherwise
+- ✅ **ntfy.sh Notifications**: All user messages trigger server notifications (configurable via MY_USERNAME env var)
+- ✅ **Sound Notifications**: Audio feedback for messages, AI responses, join/leave events
+- ✅ **Improved Media Sync**: Fixed microphone/camera/screen share indicators updating properly across all clients
+
 **Completed Fixes:**
+- Fixed Vue reactivity issues with track updates (always create new object references)
+- Fixed screen share not appearing on remote clients without refresh
+- Fixed microphone icon persistence on remote clients when muted
+- Separated camera mute/unmute from screen share publish/unpublish handling
 - Fixed duplicate messages being sent to bot context
 - Resolved camera track cleanup issues (handle mute events vs unpublish)
 - Fixed audio feedback by properly filtering local participant audio
@@ -308,4 +319,4 @@ LIVEKIT_URL=ws://localhost:7880  # LiveKit server URL (dev mode)
 - Migrated from custom WebRTC/WebSocket to LiveKit SFU
 - Implemented proper track lifecycle management
 - Added comprehensive audio level monitoring
-- Integrated customizable sound notifications
+- Integrated customizable sound notifications with localStorage persistence

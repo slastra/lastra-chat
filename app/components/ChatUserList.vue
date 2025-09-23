@@ -101,7 +101,7 @@ watch(isFullscreenOpen, (isOpen) => {
       <div
         v-for="user in sortedUsers"
         :key="user.userId"
-        class="space-y-2 border rounded-lg border-accented bg-default/50 p-2"
+        class=" border rounded-lg border-accented bg-default/50 p-2"
       >
         <div class="flex items-center justify-between">
           <UUser
@@ -172,6 +172,7 @@ watch(isFullscreenOpen, (isOpen) => {
 
         <!-- Audio track (invisible but necessary for audio playback) -->
         <!-- Don't render local participant's audio to prevent feedback -->
+
         <VideoTrack
           v-if="user.mediaState?.microphone && user.userId !== liveKitRoom?.localParticipant.value?.identity"
           :track="liveKitRoom?.getAudioTrack(user.userId)"

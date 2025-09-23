@@ -10,6 +10,7 @@ Real-time chat application built with Nuxt 3 and LiveKit, featuring WebRTC-based
 - **Name-only Entry**: Join conversations without registration or authentication
 - **Device Management**: Camera, microphone, and speaker selection with live switching
 - **Adaptive Streaming**: Dynamic video quality based on network conditions
+- **Fullscreen Video**: Click any video stream to view in fullscreen with automatic quality enhancement
 
 ### AI Integration
 - **Multiple AI Bots**: Configurable bots powered by Google Gemini
@@ -20,9 +21,11 @@ Real-time chat application built with Nuxt 3 and LiveKit, featuring WebRTC-based
 ### User Experience
 - **Media Controls**: Intuitive controls for camera, microphone, and screen sharing
 - **Audio Level Monitoring**: Real-time audio level visualization
-- **Sound Notifications**: Customizable sound effects for chat events
+- **Sound Notifications**: Customizable sound effects for chat events (messages, joins, leaves, AI responses)
+- **Push Notifications**: ntfy.sh integration for message notifications when away
 - **Connection Status**: Real-time connection state indicators
 - **Responsive Design**: Mobile-friendly interface with Nuxt UI v3 components
+- **Sound Settings**: Customizable sound profiles with volume control and event mapping
 
 ## Technology Stack
 
@@ -56,6 +59,8 @@ LIVEKIT_KEY=your-api-key                 # LiveKit API key
 LIVEKIT_SECRET=your-api-secret           # LiveKit API secret
 LIVEKIT_URL=wss://your-livekit-url       # LiveKit server URL
 NUXT_PUBLIC_SITE_URL=https://lastra.us   # Production URL
+NTFY_TOPIC=your-ntfy-topic               # ntfy.sh topic for notifications
+MY_USERNAME=your-username                # Your username to filter self-notifications
 ```
 
 ### Development
@@ -159,6 +164,9 @@ pnpm run lint        # ESLint with auto-fix
 ### Bot Management
 - `GET /api/bots` - Retrieve bot configurations
 - `POST /api/bot-toggle` - Enable/disable bots
+
+### Notifications
+- `POST /api/notify` - Send ntfy.sh notifications for messages
 
 ## License
 

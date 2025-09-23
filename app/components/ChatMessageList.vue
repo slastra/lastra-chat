@@ -50,8 +50,8 @@ onMounted(() => {
       v-if="visibleMessages.length === 0 && connectionStatus !== 'connecting'"
       class="flex flex-col items-center justify-center flex-1 text-muted py-12"
     >
-      <UIcon name="i-lucide-message-circle" class="text-4xl mb-2" />
-      <p>No messages yet. Start the conversation!</p>
+      <UIcon name="i-lucide-message-circle-dashed" class="text-4xl mb-2" />
+      <p>Nothin' yet!</p>
     </div>
 
     <!-- Loading state -->
