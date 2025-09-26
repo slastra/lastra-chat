@@ -1,16 +1,18 @@
 # Lastra Chat
 
-Real-time chat application built with Nuxt 3 and LiveKit, featuring WebRTC-based video, audio, screen sharing, and instant messaging with AI bot integration.
+Real-time chat application built with Nuxt 4 and LiveKit, featuring WebRTC-based video, audio, screen sharing, instant messaging, file sharing, and AI bot integration with DiceBear avatars.
 
 ## Features
 
 ### Core Functionality
 - **WebRTC Communication**: Video, audio, and screen sharing via LiveKit SFU
 - **Real-time Messaging**: Data channel-based instant messaging with typing indicators
+- **File Sharing**: Upload and share images, videos, audio, documents, and archives
+- **DiceBear Avatars**: Unique geometric avatar generation using identicon style
 - **Name-only Entry**: Join conversations without registration or authentication
 - **Device Management**: Camera, microphone, and speaker selection with live switching
 - **Adaptive Streaming**: Dynamic video quality based on network conditions
-- **Fullscreen Video**: Click any video stream to view in fullscreen with automatic quality enhancement
+- **Click-to-Download**: File attachments with original filename preservation
 
 ### AI Integration
 - **Multiple AI Bots**: Configurable bots powered by Google Gemini
@@ -24,23 +26,26 @@ Real-time chat application built with Nuxt 3 and LiveKit, featuring WebRTC-based
 - **Sound Notifications**: Customizable sound effects for chat events (messages, joins, leaves, AI responses)
 - **Push Notifications**: ntfy.sh integration for message notifications when away
 - **Connection Status**: Real-time connection state indicators
-- **Responsive Design**: Mobile-friendly interface with Nuxt UI v3 components
-- **Sound Settings**: Customizable sound profiles with volume control and event mapping
+- **Responsive Design**: Mobile-friendly interface with Nuxt UI v4 components
+- **File Upload Modal**: Drag-and-drop or button-based file selection with progress tracking
+- **Rich Media Display**: Inline preview for images, video, and audio files
 
 ## Technology Stack
 
-- **Framework**: Nuxt 3, Vue 3, TypeScript
+- **Framework**: Nuxt 4.1.2, Vue 3.5.21, TypeScript 5.9.2
 - **WebRTC**: LiveKit Server (SFU architecture)
-- **UI Library**: Nuxt UI v3
+- **UI Library**: Nuxt UI v4.0.0 (stable)
+- **Avatars**: DiceBear Core 9.2.4 with Identicon style
 - **AI Provider**: Google Gemini AI
 - **Real-time**: LiveKit data channels
+- **File Storage**: Local filesystem with organized structure
 - **Notifications**: ntfy.sh integration
 
 ## Setup
 
 ### Prerequisites
 - Node.js 18+
-- pnpm
+- pnpm 10.15.1
 - LiveKit Server (for WebRTC functionality)
 
 ### Installation
@@ -161,12 +166,45 @@ pnpm run lint        # ESLint with auto-fix
 - `POST /api/livekit-token` - Generate access tokens
 - `POST /api/chat` - Process AI bot messages
 
+### File Management
+- `POST /api/upload` - Upload files with validation and storage
+- `GET /api/download/[...path]` - Download files with original filenames
+- `POST /api/validate-username` - Check username availability
+
 ### Bot Management
 - `GET /api/bots` - Retrieve bot configurations
 - `POST /api/bot-toggle` - Enable/disable bots
 
 ### Notifications
 - `POST /api/notify` - Send ntfy.sh notifications for messages
+
+## File Upload System
+
+### Supported File Types
+- **Images**: JPEG, PNG, GIF, WebP, SVG (max 10MB)
+- **Audio**: MP3, WAV, OGG, M4A, WebM (max 25MB)
+- **Video**: MP4, WebM, MOV (max 100MB)
+- **Documents**: PDF, DOC, DOCX, TXT, MD (max 10MB)
+- **Archives**: ZIP, RAR, 7Z, TAR, GZ (max 50MB)
+
+### Storage Structure
+Files are organized by upload date:
+```
+public/uploads/
+├── 2024/
+│   ├── 01/         # January uploads
+│   ├── 02/         # February uploads
+│   └── ...
+└── [year]/[month]/[uuid-timestamp.ext]
+```
+
+## Avatar System
+
+The application uses DiceBear to generate unique identicon-style avatars:
+- **Consistent**: Same username always generates the same avatar
+- **Unique**: Different usernames create distinct geometric patterns
+- **Lightweight**: SVG-based avatars with small file sizes
+- **Accessible**: Proper alt text and semantic markup
 
 ## License
 

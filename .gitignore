@@ -1,4 +1,8 @@
+# Documentation files
 CLAUDE.md
+nuxt.txt
+nuxt-ui.txt
+livekit.txt
 # Nuxt dev/build outputs
 .output
 .data
@@ -28,3 +32,6 @@ logs
 .history
 .vercel
 .env*.local
+
+# File uploads
+public/uploads
