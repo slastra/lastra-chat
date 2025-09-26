@@ -2,6 +2,15 @@
 import type { UseLiveKitChatReturn } from '../composables/useLiveKitChat'
 import type { UseLiveKitRoomReturn } from '../composables/useLiveKitRoom'
 
+interface FileUpload {
+  url: string
+  originalName: string
+  mimeType: string
+  size: number
+  type: string
+  uploadedAt: string
+}
+
 // Inject LiveKit instances
 const liveKitChat = inject('liveKitChat') as UseLiveKitChatReturn
 const liveKitRoom = inject('liveKitRoom') as UseLiveKitRoomReturn
@@ -45,12 +54,7 @@ const handleInput = () => {
   }, 1000)
 }
 
-const handleSubmit = async () => {
-  if (!input.value.trim()) return
-
-  const message = input.value
-  input.value = ''
-
+const sendMessageWithAttachments = async (message: string, attachments?: FileUpload[]) => {
   if (isTyping.value) {
     isTyping.value = false
     sendTypingIndicator(false)
@@ -64,19 +68,48 @@ const handleSubmit = async () => {
   // Check if it's a slash command
   if (isCommand(message)) {
     await executeCommand(message)
-  } else {
-    // Check if this message should trigger a bot BEFORE sending
-    // This way the bot gets the context without the current message
-    const botPromise = liveKitBots?.checkOutgoingMessage
-      ? liveKitBots.checkOutgoingMessage(message, liveKitRoom.roomName)
-      : Promise.resolve()
-
-    // Send the user's message
-    await sendMessage(message)
-
-    // Wait for bot check to complete
-    await botPromise
+    return
   }
+
+  // Create message data with attachments
+  const messageData = {
+    type: 'message',
+    content: message,
+    attachments: attachments || []
+  }
+
+  // Check if this message should trigger a bot BEFORE sending
+  const botPromise = liveKitBots?.checkOutgoingMessage
+    ? liveKitBots.checkOutgoingMessage(message, liveKitRoom.roomName)
+    : Promise.resolve()
+
+  // Send the message with attachments through LiveKit data channel
+  if (attachments && attachments.length > 0) {
+    // Send as JSON string for messages with attachments
+    await sendMessage(JSON.stringify(messageData))
+  } else {
+    // Send as plain text for simple messages
+    await sendMessage(message)
+  }
+
+  // Wait for bot check to complete
+  await botPromise
+}
+
+const handleSubmit = async () => {
+  if (!input.value.trim()) return
+
+  const message = input.value
+  input.value = ''
+
+  await sendMessageWithAttachments(message)
+}
+
+const handleFilesUploaded = async (files: FileUpload[]) => {
+  const message = input.value.trim()
+  input.value = ''
+
+  await sendMessageWithAttachments(message, files)
 }
 
 const chatStatus = computed(() => {
@@ -95,6 +128,11 @@ const chatStatus = computed(() => {
     @input="handleInput"
     @submit="handleSubmit"
   >
-    <UChatPromptSubmit :status="chatStatus as any" />
+    <template #default>
+      <div class="flex items-center gap-1">
+        <FileUploadButton @files-uploaded="handleFilesUploaded" />
+        <UChatPromptSubmit :status="chatStatus as any" />
+      </div>
+    </template>
   </UChatPrompt>
 </template>

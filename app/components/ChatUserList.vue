@@ -23,6 +23,15 @@ interface VideoTrackInstance extends ComponentPublicInstance {
 const webcamRefs = ref<Record<string, VideoTrackInstance | null>>({})
 const screenRefs = ref<Record<string, VideoTrackInstance | null>>({})
 
+// Generate avatars for users
+const getUserAvatar = (userName: string, isBot: boolean) => {
+  if (isBot) {
+    return { icon: 'i-lucide-bot' }
+  }
+  const avatarUrl = useDiceBearAvatar(userName)
+  return { src: avatarUrl.value }
+}
+
 const sortedUsers = computed(() => {
   const users = []
 
@@ -115,15 +124,7 @@ watch(isFullscreenOpen, (isOpen) => {
                     ? 'AI Assistant'
                     : 'Active now'
             "
-            :avatar="
-              user.userId?.startsWith('ai-')
-                ? {
-                  icon: 'i-lucide-bot'
-                }
-                : {
-                  text: user.userName.charAt(0).toUpperCase()
-                }
-            "
+            :avatar="getUserAvatar(user.userName, user.userId?.startsWith('ai-') || false)"
             size="sm"
           />
 

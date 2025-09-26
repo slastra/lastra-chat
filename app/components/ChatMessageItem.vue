@@ -2,6 +2,21 @@
 import type { ChatMessage } from '~/composables/useLiveKitChatState'
 import { useTimeAgo } from '@vueuse/core'
 
+interface FileAttachment {
+  url: string
+  originalName: string
+  mimeType: string
+  size: number
+  type: 'image' | 'video' | 'audio' | 'document' | 'archive'
+  uploadedAt: string
+}
+
+interface MessageWithAttachments {
+  type: 'message'
+  content: string
+  attachments: FileAttachment[]
+}
+
 const props = defineProps<{
   message: ChatMessage
 }>()
@@ -25,6 +40,32 @@ const exactTime = computed(() => {
     minute: '2-digit'
   })
 })
+
+// Parse message content to detect attachments
+const parsedMessage = computed(() => {
+  try {
+    // Try to parse as JSON (messages with attachments)
+    const parsed = JSON.parse(props.message.content) as MessageWithAttachments
+    if (parsed.type === 'message' && parsed.attachments) {
+      return {
+        content: parsed.content || '',
+        attachments: parsed.attachments
+      }
+    }
+  } catch {
+    // Not JSON, treat as plain text
+  }
+
+  return {
+    content: props.message.content,
+    attachments: []
+  }
+})
+
+const hasAttachments = computed(() => parsedMessage.value.attachments.length > 0)
+
+// DiceBear avatar for user messages
+const userAvatarUrl = useDiceBearAvatar(props.message.userName)
 </script>
 
 <template>
@@ -48,13 +89,20 @@ const exactTime = computed(() => {
   >
     <div :class="['flex gap-3 max-w-[70%]', isOwnMessage ? 'flex-row-reverse' : 'flex-row']">
       <!-- Avatar -->
-      <UAvatar
-        :alt="message.userName"
-        :icon="isAIMessage ? 'i-lucide-bot' : undefined"
-        :label="!isAIMessage ? message.userName.charAt(0).toUpperCase() : undefined"
-        size="lg"
-        class="mt-5"
-      />
+      <div v-if="isAIMessage" class="mt-5">
+        <UAvatar
+          :alt="message.userName"
+          icon="i-lucide-bot"
+          size="lg"
+        />
+      </div>
+      <div v-else class="mt-5">
+        <img
+          :src="userAvatarUrl"
+          :alt="message.userName"
+          class="w-10 h-10 rounded-full"
+        >
+      </div>
 
       <!-- Message content -->
       <div :class="['flex flex-col gap-1', isOwnMessage ? 'items-end' : 'items-start']">
@@ -108,7 +156,14 @@ const exactTime = computed(() => {
               : '[&_blockquote]:border-accented [&_blockquote]:text-muted'
           ]"
         >
-          <MDC :value="message.content" />
+          <!-- Text content (if any) -->
+          <MDC v-if="parsedMessage.content.trim()" :value="parsedMessage.content" />
+
+          <!-- File attachments -->
+          <AttachmentRenderer
+            v-if="hasAttachments"
+            :attachments="parsedMessage.attachments"
+          />
         </div>
       </div>
     </div>
