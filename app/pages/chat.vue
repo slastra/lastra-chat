@@ -49,6 +49,24 @@ const allParticipants = computed(() => {
   return participants
 })
 
+// Computed property for human user count (excluding bots) to match ChatUserList
+const humanUserCount = computed(() => {
+  const users = []
+
+  // Add local participant
+  if (liveKitRoom?.localParticipant.value) {
+    users.push(liveKitRoom.localParticipant.value)
+  }
+
+  // Add remote participants
+  if (liveKitRoom?.remoteParticipants.value) {
+    users.push(...liveKitRoom.remoteParticipants.value)
+  }
+
+  // Filter out bots (same logic as ChatUserList)
+  return users.filter(user => !user.identity?.startsWith('ai-')).length
+})
+
 // Provide instances to child components
 provide('liveKitRoom', liveKitRoom)
 provide('liveKitChat', liveKitChat)
@@ -156,7 +174,7 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
               Online Users
             </h3>
             <UBadge
-              :label="String(liveKitRoom.participantCount.value)"
+              :label="String(humanUserCount)"
               color="success"
               variant="subtle"
             />

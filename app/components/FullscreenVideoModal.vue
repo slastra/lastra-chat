@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RemoteVideoTrack, LocalVideoTrack } from 'livekit-client'
+import type { UseLiveKitRoomReturn } from '../composables/useLiveKitRoom'
 
 interface Props {
   isOpen: boolean
@@ -10,6 +11,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const liveKitRoom = inject('liveKitRoom') as UseLiveKitRoomReturn
 
 const emit = defineEmits<{
   'update:isOpen': [value: boolean]
@@ -59,6 +61,7 @@ const showVideo = computed(() => modalOpen.value && props.track)
         <VideoStats
           v-if="showVideo"
           :track="track"
+          :is-local="participantIdentity === liveKitRoom?.localParticipant.value?.identity"
           class="absolute bottom-4 right-4 text-base"
         />
         <div v-else-if="modalOpen" class="text-white text-center">

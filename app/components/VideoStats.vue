@@ -5,6 +5,7 @@ import { Track } from 'livekit-client'
 interface Props {
   track?: RemoteVideoTrack | LocalVideoTrack
   className?: string
+  isLocal?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -97,6 +98,10 @@ onUnmounted(() => {
 // Format display text
 const displayText = computed(() => {
   if (!resolution.value) return ''
+  // Hide FPS for local feeds, show only resolution
+  if (props.isLocal) {
+    return resolution.value
+  }
   return `${resolution.value} • ${fps.value} FPS`
 })
 </script>

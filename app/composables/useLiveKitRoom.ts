@@ -626,7 +626,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
           })
 
           // Publish tracks with explicit high-performance encoding
-          await Promise.all(tracks.map(track => {
+          await Promise.all(tracks.map((track) => {
             if (track.kind === 'video') {
               return room.value!.localParticipant.publishTrack(track, {
                 videoEncoding: {

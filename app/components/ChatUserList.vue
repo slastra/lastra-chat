@@ -131,7 +131,7 @@ watch(isFullscreenOpen, (isOpen) => {
           <div class="flex items-center gap-1">
             <UIcon
               v-if="user.mediaState?.webcam"
-              name="i-lucide-video"
+              name="i-lucide-webcam"
               class="text-muted"
             />
             <UIcon
@@ -141,7 +141,7 @@ watch(isFullscreenOpen, (isOpen) => {
             />
             <UIcon
               v-if="user.mediaState?.screen"
-              name="i-lucide-monitor-up"
+              name="i-lucide-screen-share"
               class="text-muted"
             />
           </div>
@@ -159,6 +159,7 @@ watch(isFullscreenOpen, (isOpen) => {
           />
           <VideoStats
             :track="liveKitRoom?.getVideoTrack(user.userId, 'camera')"
+            :is-local="user.userId === liveKitRoom?.localParticipant.value?.identity"
             class="absolute bottom-2 right-2"
           />
         </div>
@@ -174,6 +175,7 @@ watch(isFullscreenOpen, (isOpen) => {
           />
           <VideoStats
             :track="liveKitRoom?.getVideoTrack(user.userId, 'screen_share')"
+            :is-local="user.userId === liveKitRoom?.localParticipant.value?.identity"
             class="absolute bottom-2 right-2"
           />
         </div>

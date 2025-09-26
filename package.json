@@ -17,6 +17,7 @@
     "@google/genai": "^1.20.0",
     "@iconify-json/lucide": "^1.2.68",
     "@nuxt/content": "^3.7.1",
+    "@nuxt/fonts": "^0.11.4",
     "@nuxt/ui": "4.0.0",
     "@nuxtjs/mdc": "^0.17.4",
     "@vueuse/nuxt": "13.9.0",

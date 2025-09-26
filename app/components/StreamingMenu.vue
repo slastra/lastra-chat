@@ -84,7 +84,7 @@ const menuItems = computed(() => {
     },
     {
       label: 'Webcam',
-      icon: 'i-lucide-video',
+      icon: 'i-lucide-webcam',
       type: 'checkbox',
       checked: props.webcamEnabled,
       onUpdateChecked: handleWebcamToggle,
@@ -92,7 +92,7 @@ const menuItems = computed(() => {
     },
     {
       label: 'Share Screen',
-      icon: 'i-lucide-monitor',
+      icon: 'i-lucide-screen-share',
       type: 'checkbox',
       checked: props.screenEnabled,
       onUpdateChecked: handleScreenToggle,
@@ -119,7 +119,7 @@ const menuItems = computed(() => {
 
     audioSettings.push({
       label: 'Audio Input',
-      icon: 'i-lucide-mic',
+      icon: 'i-lucide-mic-2',
       children: [[...audioInputChildren]]
     })
   }
@@ -135,7 +135,7 @@ const menuItems = computed(() => {
 
     audioSettings.push({
       label: 'Audio Output',
-      icon: 'i-lucide-volume-2',
+      icon: 'i-lucide-headphones',
       children: [[...audioOutputChildren]]
     })
   }
@@ -144,7 +144,7 @@ const menuItems = computed(() => {
   if (audioSettings.length > 0) {
     settingsItems.push({
       label: 'Audio Settings',
-      icon: 'i-lucide-settings',
+      icon: 'i-lucide-audio-lines',
       children: [audioSettings]
     })
   }
@@ -160,7 +160,7 @@ const menuItems = computed(() => {
 
     settingsItems.push({
       label: 'Video Settings',
-      icon: 'i-lucide-video',
+      icon: 'i-lucide-film',
       children: [[...videoChildren]]
     })
   }
