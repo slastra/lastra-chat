@@ -1,7 +1,29 @@
 # Project Instructions for Claude Code
 
+## Quick Reference for Documentation Files
+- **Use `livekit.txt`** when working with: WebRTC features, video/audio/screen sharing, room management, data channels, AI agents
+- **Use `nuxt-ui.txt`** when working with: UI components, forms, dropdowns, buttons, modals, themes, styling
+- **Use `nuxt.txt`** when working with: Nuxt configuration, server/client code, plugins, modules, SSR/SSG, routing
+
 ## Project Overview
-This is a Nuxt 3 real-time chat application using LiveKit for WebRTC-based video, audio, screen sharing, and messaging. The project uses TypeScript, Vue 3 Composition API, Nuxt UI v3 components, and integrates AI bots via Google Gemini.
+This is a Nuxt 4 real-time chat application using LiveKit for WebRTC-based video, audio, screen sharing, and messaging. The project uses TypeScript, Vue 3 Composition API, Nuxt UI v4 components, and integrates AI bots via Google Gemini.
+
+## Technology Stack
+
+### Core Dependencies
+- **Nuxt 4.1.2** - Vue 3 full-stack framework
+- **Nuxt UI 4.0.0** - Component library (stable)
+- **LiveKit Client 2.15.7** - WebRTC SFU client
+- **LiveKit Server SDK 2.13.3** - Server-side LiveKit integration
+- **Google Generative AI 1.20.0** - Gemini AI integration
+- **Vue 3.5.21** - Reactive frontend framework
+- **TypeScript 5.9.2** - Type-safe development
+
+### Development Tools
+- **pnpm 10.15.1** - Package manager
+- **Vite** - Build tool and dev server
+- **ESLint** - Code linting
+- **vue-tsc** - TypeScript checking for Vue
 
 ## Key Requirements
 
@@ -24,21 +46,49 @@ This is a Nuxt 3 real-time chat application using LiveKit for WebRTC-based video
 - Never expose or log secrets, keys, or credentials
 - Follow all security best practices
 
-## Nuxt UI v3 Component Guide
+## Documentation Resources
+
+### Available Documentation Files
+The project includes comprehensive documentation files for key technologies:
+
+1. **`livekit.txt`** - Complete LiveKit documentation including:
+   - WebRTC SFU architecture and room management
+   - Client SDK guides for audio, video, screen sharing
+   - Data channels and state synchronization
+   - AI agents framework and telephony integration
+   - Code examples and recipes
+
+2. **`nuxt-ui.txt`** - Nuxt UI v4 component documentation:
+   - Complete component API reference
+   - Props, slots, and events for all components
+   - Theme configuration and styling
+   - Migration guides and best practices
+
+3. **`nuxt.txt`** - Nuxt 4 framework documentation:
+   - Core concepts and architecture
+   - Server/client rendering strategies
+   - Module development and plugins
+   - Performance optimization techniques
+
+### Using Documentation Resources
+When implementing features or debugging:
+1. Reference the appropriate `.txt` file for API details
+2. Search within files for specific component/feature documentation
+3. Use examples from the documentation as implementation guides
+
+## Nuxt UI v4 Component Guide
+
+### Component Version
+**Current Version**: Nuxt UI v4.0.0 (stable)
 
 ### Accessing Component Documentation
-Component documentation and examples can be accessed using this URL pattern:
+Component documentation is available in `nuxt-ui.txt` or via URL:
 ```
 https://ui.nuxt.com/raw/components/<component-name>.md
 ```
 
-For theme documentation:
-```
-https://ui.nuxt.com/raw/getting-started/theme.md
-```
-
 ### Available Components
-The following Nuxt UI v3 components are available in this project:
+The following Nuxt UI v4 components are available in this project:
 
 **Layout & Structure:**
 - App, Container, Main, Page, PageBody, PageHeader, PageSection, PageAside
@@ -163,6 +213,12 @@ pnpm run dev
 
 # Build
 pnpm run build
+
+# Clean cache and build artifacts
+pnpm run clean
+
+# Clean build artifacts only
+pnpm run clean:build
 ```
 
 ## Nuxt 4 TypeScript Guide
@@ -237,9 +293,9 @@ Future (Nuxt 4 recommended): `vue-tsc -b --noEmit` for better project reference 
     └── sounds/         # Audio notification files
 ```
 
-## LiveKit Integration (Migration Complete)
+## LiveKit Integration (Production Ready)
 
-**Status**: The project has successfully migrated from custom WebRTC/WebSocket to LiveKit. Core functionality is working with a few remaining bugs to be addressed. See `livekit-migration.md` for migration history and `livekit.txt` for LiveKit documentation resources.
+**Status**: The project has successfully migrated from custom WebRTC/WebSocket to LiveKit. All core functionality is stable and optimized. Reference `livekit.txt` for complete LiveKit documentation and implementation guides.
 
 ### LiveKit Configuration
 
@@ -296,9 +352,17 @@ LIVEKIT_URL=ws://localhost:7880  # LiveKit server URL (dev mode)
 
 ### Recent Improvements
 
-**New Features (Session Updates):**
+**New Features (Latest Updates):**
+- ✅ **Enhanced Screen Sharing**: Multiple quality presets with up to 60 FPS for gaming
+  - Gaming Mode: 1080p @ 60 FPS for high-motion content
+  - Balanced: 1080p @ 30 FPS (default)
+  - Presentation: 1080p @ 15 FPS for static slides
+  - Bandwidth Saver: 720p @ 15 FPS
+- ✅ **Nuxt UI v4 Migration**: Upgraded from beta to stable v4.0.0
+- ✅ **Improved Menu System**: Radio button selection for screen quality options
+- ✅ **Persistent Preferences**: Screen share quality saved to localStorage
 - ✅ **Fullscreen Video Modal**: Click any video stream to view in fullscreen with automatic quality scaling
-- ✅ **Dynamic Video Quality Control**: Uses LiveKit's `setVideoQuality()` API for 1080p in fullscreen, low quality otherwise
+- ✅ **Dynamic Video Quality Control**: Uses LiveKit's `setVideoQuality()` API for adaptive quality
 - ✅ **ntfy.sh Notifications**: All user messages trigger server notifications (configurable via MY_USERNAME env var)
 - ✅ **Sound Notifications**: Audio feedback for messages, AI responses, join/leave events
 - ✅ **Improved Media Sync**: Fixed microphone/camera/screen share indicators updating properly across all clients

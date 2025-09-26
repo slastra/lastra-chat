@@ -41,7 +41,7 @@ const showVideo = computed(() => modalOpen.value && props.track)
     fullscreen
     :ui="{
       wrapper: 'flex items-center justify-center',
-      content: 'bg-black',
+
       body: 'sm:p-0'
     }"
   >

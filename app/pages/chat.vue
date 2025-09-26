@@ -128,6 +128,10 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
     console.error(`[Chat] Failed to change ${type} device:`, error)
   }
 }
+
+const handleScreenQualityChange = (quality: 'gaming' | 'presentation' | 'balanced' | 'bandwidth') => {
+  liveKitRoom.setScreenShareQuality(quality)
+}
 </script>
 
 <template>
@@ -167,10 +171,12 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
             :selected-camera="liveKitRoom.selectedCamera.value ?? undefined"
             :selected-microphone="liveKitRoom.selectedMicrophone.value ?? undefined"
             :selected-speaker="liveKitRoom.selectedSpeaker.value ?? undefined"
+            :screen-share-quality="liveKitRoom.screenShareQuality.value"
             @webcam-toggle="handleWebcamToggle"
             @mic-toggle="handleMicToggle"
             @screen-toggle="handleScreenToggle"
             @device-change="handleDeviceChange"
+            @screen-quality-change="handleScreenQualityChange"
           />
           <!-- Audio Level Display -->
           <div

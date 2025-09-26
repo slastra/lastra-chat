@@ -9,6 +9,7 @@ const props = defineProps<{
   selectedMicrophone?: string
   selectedSpeaker?: string
   supportsSpeakerSelection?: boolean
+  screenShareQuality?: 'gaming' | 'presentation' | 'balanced' | 'bandwidth'
 }>()
 
 const emit = defineEmits<{
@@ -19,6 +20,7 @@ const emit = defineEmits<{
     type: 'videoInput' | 'audioInput' | 'audioOutput',
     deviceId: string
   ]
+  screenQualityChange: [quality: 'gaming' | 'presentation' | 'balanced' | 'bandwidth']
 }>()
 
 // Device management
@@ -68,6 +70,10 @@ const selectCamera = (deviceId: string) => {
   emit('deviceChange', 'videoInput', deviceId)
 }
 
+const selectScreenQuality = (quality: 'gaming' | 'presentation' | 'balanced' | 'bandwidth') => {
+  emit('screenQualityChange', quality)
+}
+
 // Build menu items dynamically
 const menuItems = computed(() => {
   const items = []
@@ -99,6 +105,8 @@ const menuItems = computed(() => {
       shortcuts: ['S']
     }
   ])
+
+  // Screen Settings will be added to settingsItems below
 
   // Build settings menu items
   const settingsItems = []
@@ -162,6 +170,31 @@ const menuItems = computed(() => {
       children: [[...videoChildren]]
     })
   }
+
+  // Screen Settings nested menu
+  const qualityOptions = [
+    { label: 'Gaming Mode (60 FPS)', value: 'gaming', description: 'Best for games & high motion' },
+    { label: 'Balanced (30 FPS)', value: 'balanced', description: 'Default for most uses' },
+    { label: 'Presentation (15 FPS)', value: 'presentation', description: 'Optimized for slides' },
+    { label: 'Bandwidth Saver', value: 'bandwidth', description: '720p 15 FPS' }
+  ]
+
+  const currentQuality = props.screenShareQuality || 'balanced'
+
+  const screenQualityChildren = qualityOptions.map(opt => ({
+    label: opt.label,
+    description: opt.description,
+    type: 'checkbox',
+    checked: currentQuality === opt.value,
+    onUpdateChecked: () => selectScreenQuality(opt.value as 'gaming' | 'presentation' | 'balanced' | 'bandwidth')
+  }))
+
+  // Add Screen Settings to settings items with single tier nesting
+  settingsItems.push({
+    label: 'Screen Settings',
+    icon: 'i-lucide-monitor',
+    children: [[...screenQualityChildren]]
+  })
 
   // Add settings items as a single group if there are any
   if (settingsItems.length > 0) {

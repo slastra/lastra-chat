@@ -5,6 +5,7 @@ const props = defineProps<{
   webcamEnabled: boolean
   micEnabled: boolean
   screenEnabled: boolean
+  screenShareQuality?: 'gaming' | 'presentation' | 'balanced' | 'bandwidth'
 }>()
 
 const emit = defineEmits<{
@@ -12,6 +13,7 @@ const emit = defineEmits<{
   micToggle: []
   screenToggle: []
   deviceChange: [type: 'video' | 'audio', deviceId: string]
+  screenQualityChange: [quality: 'gaming' | 'presentation' | 'balanced' | 'bandwidth']
 }>()
 
 // Device management
@@ -54,6 +56,18 @@ const toggleMic = () => {
 
 const toggleScreen = () => {
   emit('screenToggle')
+}
+
+// Screen share quality options
+const screenQualityOptions = [
+  { label: 'Gaming (60 FPS)', value: 'gaming', description: 'Best for games and high-motion content' },
+  { label: 'Balanced (30 FPS)', value: 'balanced', description: 'Good for most use cases' },
+  { label: 'Presentation (15 FPS)', value: 'presentation', description: 'Optimized for static content' },
+  { label: 'Bandwidth Saver', value: 'bandwidth', description: '720p 15 FPS for low bandwidth' }
+]
+
+const selectScreenQuality = (quality: 'gaming' | 'presentation' | 'balanced' | 'bandwidth') => {
+  emit('screenQualityChange', quality)
 }
 
 // Device selection
@@ -131,13 +145,28 @@ onMounted(() => {
     </UDropdownMenu>
 
     <!-- Screen Share Control -->
-    <UButton
-      :color="props.screenEnabled ? 'primary' : 'neutral'"
-      :variant="props.screenEnabled ? 'solid' : 'ghost'"
-      :icon="props.screenEnabled ? 'i-lucide-monitor-up' : 'i-lucide-monitor'"
-      size="sm"
-      square
-      @click="toggleScreen"
-    />
+    <UDropdownMenu
+      :items="[
+        [{
+          label: 'Screen Share Quality',
+          disabled: true
+        }],
+        screenQualityOptions.map(opt => ({
+          label: opt.label,
+          description: opt.description,
+          click: () => selectScreenQuality(opt.value as 'gaming' | 'presentation' | 'balanced' | 'bandwidth'),
+          icon: props.screenShareQuality === opt.value ? 'i-lucide-check' : undefined
+        }))
+      ]"
+    >
+      <UButton
+        :color="props.screenEnabled ? 'primary' : 'neutral'"
+        :variant="props.screenEnabled ? 'solid' : 'ghost'"
+        :icon="props.screenEnabled ? 'i-lucide-monitor-up' : 'i-lucide-monitor'"
+        size="sm"
+        square
+        @click="toggleScreen"
+      />
+    </UDropdownMenu>
   </div>
 </template>

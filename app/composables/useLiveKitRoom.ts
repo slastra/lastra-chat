@@ -5,7 +5,8 @@ import {
   VideoPresets,
   ScreenSharePresets,
   ConnectionState,
-  ConnectionQuality
+  ConnectionQuality,
+  VideoPreset
 } from 'livekit-client'
 
 import type {
@@ -70,6 +71,7 @@ export interface UseLiveKitRoomReturn {
   isMicrophoneEnabled: Ref<boolean>
   isScreenShareEnabled: Ref<boolean>
   audioLevel: Ref<number>
+  screenShareQuality: Ref<'gaming' | 'presentation' | 'balanced' | 'bandwidth'>
 
   // Device management
   cameras: Ref<MediaDeviceInfo[]>
@@ -89,6 +91,7 @@ export interface UseLiveKitRoomReturn {
   enableCamera: (enabled?: boolean) => Promise<void>
   enableMicrophone: (enabled?: boolean) => Promise<void>
   enableScreenShare: (enabled?: boolean) => Promise<void>
+  setScreenShareQuality: (quality: 'gaming' | 'presentation' | 'balanced' | 'bandwidth') => void
 
   // Device selection
   switchCamera: (deviceId: string) => Promise<void>
@@ -124,6 +127,19 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
   const isMicrophoneEnabled = ref(false)
   const isScreenShareEnabled = ref(false)
   const audioLevel = ref(0)
+
+  // Screen share quality presets
+  const screenShareQuality = ref<'gaming' | 'presentation' | 'balanced' | 'bandwidth'>('balanced')
+  const customScreenSharePresets = {
+    // 60 FPS for gaming/video content with high motion
+    gaming: new VideoPreset(1920, 1080, 120_000, 60, 'high'),
+    // 30 FPS balanced for most use cases
+    balanced: ScreenSharePresets.h1080fps30,
+    // 15 FPS for static presentations
+    presentation: ScreenSharePresets.h1080fps15,
+    // 720p 15 FPS for low bandwidth
+    bandwidth: ScreenSharePresets.h720fps15
+  }
 
   // Device management
   const cameras = ref<MediaDeviceInfo[]>([])
@@ -236,7 +252,13 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       publishDefaults: {
         // Enable higher quality video layers for better fullscreen viewing
         videoSimulcastLayers: [VideoPresets.h360, VideoPresets.h540, VideoPresets.h720, VideoPresets.h1080],
-        screenShareSimulcastLayers: [ScreenSharePresets.h720fps15, ScreenSharePresets.h1080fps15, ScreenSharePresets.h1080fps30],
+        // Enhanced screen share layers including 60 FPS option
+        screenShareSimulcastLayers: [
+          ScreenSharePresets.h720fps15,
+          ScreenSharePresets.h1080fps15,
+          ScreenSharePresets.h1080fps30,
+          customScreenSharePresets.gaming // 1080p @ 60 FPS
+        ],
         videoCodec: 'vp9', // VP9 provides better quality at same bitrate
         audioPreset: {
           maxBitrate: 20_000,
@@ -603,16 +625,35 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     if (!room.value) throw new Error('Room not connected')
 
     if (enabled) {
+      // Load saved quality preference or use balanced as default
+      const savedQuality = localStorage.getItem('screenShareQuality') as typeof screenShareQuality.value
+      if (savedQuality && savedQuality in customScreenSharePresets) {
+        screenShareQuality.value = savedQuality
+      }
+
+      // Get the appropriate preset based on quality setting
+      const preset = customScreenSharePresets[screenShareQuality.value]
+
       const options: ScreenShareCaptureOptions = {
-        resolution: ScreenSharePresets.h1080fps15.resolution,
+        resolution: preset.resolution,
         audio: true
       }
+
+      // Note: Bitrate control happens through the simulcast layers and LiveKit's adaptive streaming
+      // The different presets already have optimized bitrate settings
+
       await room.value.localParticipant.setScreenShareEnabled(true, options)
     } else {
       await room.value.localParticipant.setScreenShareEnabled(false)
     }
 
     updateLocalMediaState()
+  }
+
+  // Set screen share quality and save preference
+  function setScreenShareQuality(quality: typeof screenShareQuality.value): void {
+    screenShareQuality.value = quality
+    localStorage.setItem('screenShareQuality', quality)
   }
 
   // Device management
@@ -741,6 +782,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     isMicrophoneEnabled: readonly(isMicrophoneEnabled),
     isScreenShareEnabled: readonly(isScreenShareEnabled),
     audioLevel: readonly(audioLevel),
+    screenShareQuality: readonly(screenShareQuality),
 
     // Device management
     cameras,
@@ -760,6 +802,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     enableCamera,
     enableMicrophone,
     enableScreenShare,
+    setScreenShareQuality,
 
     // Device selection
     switchCamera,
