@@ -3,10 +3,8 @@ import {
   RoomEvent,
   Track,
   VideoPresets,
-  ScreenSharePresets,
   ConnectionState,
-  ConnectionQuality,
-  VideoPreset
+  ConnectionQuality
 } from 'livekit-client'
 
 import type {
@@ -70,7 +68,6 @@ export interface UseLiveKitRoomReturn {
   isMicrophoneEnabled: Ref<boolean>
   isScreenShareEnabled: Ref<boolean>
   audioLevel: Ref<number>
-  screenShareQuality: Ref<'gaming' | 'presentation' | 'balanced' | 'bandwidth'>
 
   // Device management
   cameras: Ref<MediaDeviceInfo[]>
@@ -90,7 +87,6 @@ export interface UseLiveKitRoomReturn {
   enableCamera: (enabled?: boolean) => Promise<void>
   enableMicrophone: (enabled?: boolean) => Promise<void>
   enableScreenShare: (enabled?: boolean) => Promise<void>
-  setScreenShareQuality: (quality: 'gaming' | 'presentation' | 'balanced' | 'bandwidth') => void
 
   // Device selection
   switchCamera: (deviceId: string) => Promise<void>
@@ -127,19 +123,6 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
   const isMicrophoneEnabled = ref(false)
   const isScreenShareEnabled = ref(false)
   const audioLevel = ref(0)
-
-  // Screen share quality presets
-  const screenShareQuality = ref<'gaming' | 'presentation' | 'balanced' | 'bandwidth'>('balanced')
-  const customScreenSharePresets = {
-    // 60 FPS for gaming/video content with high motion
-    gaming: new VideoPreset(1920, 1080, 120_000, 60, 'high'),
-    // 30 FPS balanced for most use cases
-    balanced: ScreenSharePresets.h1080fps30,
-    // 15 FPS for static presentations
-    presentation: ScreenSharePresets.h1080fps15,
-    // 720p 15 FPS for low bandwidth
-    bandwidth: ScreenSharePresets.h720fps15
-  }
 
   // Device management
   const cameras = ref<MediaDeviceInfo[]>([])
@@ -252,14 +235,12 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       publishDefaults: {
         // Enable higher quality video layers for better fullscreen viewing
         videoSimulcastLayers: [VideoPresets.h360, VideoPresets.h540, VideoPresets.h720, VideoPresets.h1080],
-        // Enhanced screen share layers including 60 FPS option
-        screenShareSimulcastLayers: [
-          ScreenSharePresets.h720fps15,
-          ScreenSharePresets.h1080fps15,
-          ScreenSharePresets.h1080fps30,
-          customScreenSharePresets.gaming // 1080p @ 60 FPS
-        ],
-        videoCodec: 'vp9', // VP9 provides better quality at same bitrate
+        // Use single high-quality screen share layer - no simulcast to force maximum quality
+        screenShareEncoding: {
+          maxBitrate: 12_000_000, // 12 Mbps for 60fps screen sharing
+          maxFramerate: 60
+        },
+        videoCodec: 'av1', // AV1 provides best compression efficiency
         audioPreset: {
           maxBitrate: 20_000,
           priority: 'high'
@@ -624,73 +605,64 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
   async function enableScreenShare(enabled = true): Promise<void> {
     if (!room.value) throw new Error('Room not connected')
 
-    if (enabled) {
-      // Load saved quality preference or use balanced as default
-      const savedQuality = localStorage.getItem('screenShareQuality') as typeof screenShareQuality.value
-      if (savedQuality && savedQuality in customScreenSharePresets) {
-        screenShareQuality.value = savedQuality
-      }
-
-      // Get the appropriate preset based on quality setting
-      const preset = customScreenSharePresets[screenShareQuality.value]
-
-      try {
-        // Use createScreenTracks to request audio along with video
-        // This allows browser tab audio sharing when the user selects a tab
-        const tracks = await room.value.localParticipant.createScreenTracks({
-          resolution: preset.resolution,
-          audio: true // Request audio track for browser tab audio
-        })
-
-        // Publish all tracks (video and potentially audio if tab was selected)
-        await Promise.all(tracks.map((track) => {
-          return room.value!.localParticipant.publishTrack(track, {
-            // Use appropriate encoding settings based on track type
-            ...(track.kind === 'video'
-              ? {
-                  simulcastLayers: [
-                    ScreenSharePresets.h720fps15,
-                    ScreenSharePresets.h1080fps15,
-                    ScreenSharePresets.h1080fps30,
-                    customScreenSharePresets.gaming
-                  ],
-                  videoCodec: 'vp9'
-                }
-              : {
-                  // Audio track settings
-                  audioBitrate: 128_000, // High quality audio for screen share
-                  dtx: false // Don't use discontinuous transmission for screen audio
-                })
+    try {
+      if (enabled) {
+        // Try multiple approaches to bypass 30fps browser limits
+        try {
+          // Approach 1: Use createScreenTracks with more explicit constraints
+          const tracks = await room.value.localParticipant.createScreenTracks({
+            audio: true,
+            resolution: {
+              width: 1920,
+              height: 1080,
+              frameRate: 60 // Explicit 60fps request
+            },
+            video: {
+              displaySurface: 'monitor' // Request full monitor capture for potentially higher fps
+            },
+            contentHint: 'motion',
+            // Try to bypass browser throttling
+            selfBrowserSurface: 'exclude'
           })
-        }))
-      } catch (error) {
-        console.error('[LiveKit] Failed to enable screen share:', error)
-        throw error
-      }
-    } else {
-      // Unpublish all screen share tracks (both video and audio)
-      const localParticipant = room.value.localParticipant
-      const screenVideoTrack = localParticipant.getTrackPublication(Track.Source.ScreenShare)
-      const screenAudioTrack = localParticipant.getTrackPublication(Track.Source.ScreenShareAudio)
 
-      const unpublishPromises = []
-      if (screenVideoTrack) {
-        unpublishPromises.push(localParticipant.unpublishTrack(screenVideoTrack.track!))
-      }
-      if (screenAudioTrack) {
-        unpublishPromises.push(localParticipant.unpublishTrack(screenAudioTrack.track!))
+          // Publish tracks with explicit high-performance encoding
+          await Promise.all(tracks.map(track => {
+            if (track.kind === 'video') {
+              return room.value!.localParticipant.publishTrack(track, {
+                videoEncoding: {
+                  maxBitrate: 12_000_000,
+                  maxFramerate: 60,
+                  priority: 'high'
+                }
+              })
+            } else {
+              // Audio track - use default settings
+              return room.value!.localParticipant.publishTrack(track)
+            }
+          }))
+        } catch (error) {
+          console.warn('[LiveKit] Advanced screen capture failed, falling back to standard:', error)
+          // Fallback to original method
+          await room.value.localParticipant.setScreenShareEnabled(true, {
+            audio: true,
+            resolution: {
+              width: 1920,
+              height: 1080,
+              frameRate: 60
+            },
+            video: true,
+            contentHint: 'motion'
+          })
+        }
+      } else {
+        await room.value.localParticipant.setScreenShareEnabled(false)
       }
 
-      await Promise.all(unpublishPromises)
+      updateLocalMediaState()
+    } catch (error) {
+      console.error('[LiveKit] Failed to toggle screen share:', error)
+      throw error
     }
-
-    updateLocalMediaState()
-  }
-
-  // Set screen share quality and save preference
-  function setScreenShareQuality(quality: typeof screenShareQuality.value): void {
-    screenShareQuality.value = quality
-    localStorage.setItem('screenShareQuality', quality)
   }
 
   // Device management
@@ -824,7 +796,6 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     isMicrophoneEnabled: readonly(isMicrophoneEnabled),
     isScreenShareEnabled: readonly(isScreenShareEnabled),
     audioLevel: readonly(audioLevel),
-    screenShareQuality: readonly(screenShareQuality),
 
     // Device management
     cameras,
@@ -844,7 +815,6 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     enableCamera,
     enableMicrophone,
     enableScreenShare,
-    setScreenShareQuality,
 
     // Device selection
     switchCamera,

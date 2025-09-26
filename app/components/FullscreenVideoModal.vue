@@ -46,7 +46,7 @@ const showVideo = computed(() => modalOpen.value && props.track)
     }"
   >
     <template #body>
-      <div class="flex items-center justify-center bg-black h-full">
+      <div class="flex items-center justify-center bg-black h-full relative">
         <VideoTrack
           v-if="showVideo"
           :key="`fullscreen-${participantIdentity}-${trackType}`"
@@ -55,6 +55,11 @@ const showVideo = computed(() => modalOpen.value && props.track)
           :clickable="false"
           :muted="false"
           class="max-w-full max-h-full object-contain"
+        />
+        <VideoStats
+          v-if="showVideo"
+          :track="track"
+          class="absolute bottom-4 right-4 text-base"
         />
         <div v-else-if="modalOpen" class="text-white text-center">
           <UIcon name="i-lucide-video-off" class="text-4xl mb-2" />

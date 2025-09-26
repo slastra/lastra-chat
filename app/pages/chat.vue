@@ -137,10 +137,6 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
     console.error(`[Chat] Failed to change ${type} device:`, error)
   }
 }
-
-const handleScreenQualityChange = (quality: 'gaming' | 'presentation' | 'balanced' | 'bandwidth') => {
-  liveKitRoom.setScreenShareQuality(quality)
-}
 </script>
 
 <template>
@@ -181,12 +177,10 @@ const handleScreenQualityChange = (quality: 'gaming' | 'presentation' | 'balance
               :selected-camera="liveKitRoom.selectedCamera.value ?? undefined"
               :selected-microphone="liveKitRoom.selectedMicrophone.value ?? undefined"
               :selected-speaker="liveKitRoom.selectedSpeaker.value ?? undefined"
-              :screen-share-quality="liveKitRoom.screenShareQuality.value"
               @webcam-toggle="handleWebcamToggle"
               @mic-toggle="handleMicToggle"
               @screen-toggle="handleScreenToggle"
               @device-change="handleDeviceChange"
-              @screen-quality-change="handleScreenQualityChange"
             />
             <!-- Audio Level Display -->
             <div
@@ -258,13 +252,13 @@ const handleScreenQualityChange = (quality: 'gaming' | 'presentation' | 'balance
 
     <!-- Screen Share Audio Rendering (hidden, for audio playback only) -->
     <div v-if="isReady" class="hidden">
-      <!-- Render screen share audio for all participants including local -->
+      <!-- Render screen share audio for remote participants only (exclude local to prevent feedback) -->
       <div v-for="participant in allParticipants" :key="`screen-audio-${participant.identity}`">
         <VideoTrack
-          v-if="participant.tracks?.screenShareAudio"
+          v-if="participant.tracks?.screenShareAudio && participant.identity !== liveKitRoom.localParticipant.value?.identity"
           :track="liveKitRoom.getScreenShareAudioTrack(participant.identity)"
           :participant-identity="participant.identity"
-          :is-local="participant.identity === liveKitRoom.localParticipant.value?.identity"
+          :is-local="false"
           :muted="false"
           :autoplay="true"
         />

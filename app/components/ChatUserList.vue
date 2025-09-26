@@ -148,7 +148,7 @@ watch(isFullscreenOpen, (isOpen) => {
         </div>
 
         <!-- Video streams using proper LiveKit track management -->
-        <div v-if="user.mediaState?.webcam" class="mt-2">
+        <div v-if="user.mediaState?.webcam" class="mt-2 relative">
           <VideoTrack
             :ref="(el) => { if (el) webcamRefs[user.userId] = el as VideoTrackInstance }"
             :track="liveKitRoom?.getVideoTrack(user.userId, 'camera')"
@@ -157,9 +157,13 @@ watch(isFullscreenOpen, (isOpen) => {
             class-name="w-full rounded bg-accented"
             @video-click="() => handleVideoClick(user.userId, 'webcam')"
           />
+          <VideoStats
+            :track="liveKitRoom?.getVideoTrack(user.userId, 'camera')"
+            class="absolute bottom-2 right-2"
+          />
         </div>
 
-        <div v-if="user.mediaState?.screen" class="mt-2">
+        <div v-if="user.mediaState?.screen" class="mt-2 relative">
           <VideoTrack
             :ref="(el) => { if (el) screenRefs[user.userId] = el as VideoTrackInstance }"
             :track="liveKitRoom?.getVideoTrack(user.userId, 'screen_share')"
@@ -167,6 +171,10 @@ watch(isFullscreenOpen, (isOpen) => {
             :is-local="user.userId === liveKitRoom?.localParticipant.value?.identity"
             class-name="w-full rounded bg-accented"
             @video-click="() => handleVideoClick(user.userId, 'screen')"
+          />
+          <VideoStats
+            :track="liveKitRoom?.getVideoTrack(user.userId, 'screen_share')"
+            class="absolute bottom-2 right-2"
           />
         </div>
 
