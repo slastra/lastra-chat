@@ -16,7 +16,6 @@ import type {
   LocalParticipant,
   AudioCaptureOptions,
   VideoCaptureOptions,
-  ScreenShareCaptureOptions,
   RemoteVideoTrack,
   LocalVideoTrack,
   RemoteAudioTrack,
@@ -103,6 +102,7 @@ export interface UseLiveKitRoomReturn {
   getParticipantTracks: (participantIdentity: string) => LiveKitParticipant['tracks']
   getVideoTrack: (participantIdentity: string, source?: 'camera' | 'screen_share') => RemoteVideoTrack | LocalVideoTrack | undefined
   getAudioTrack: (participantIdentity: string) => RemoteAudioTrack | LocalAudioTrack | undefined
+  getScreenShareAudioTrack: (participantIdentity: string) => RemoteAudioTrack | LocalAudioTrack | undefined
   getVideoPublication: (participantIdentity: string, source?: 'camera' | 'screen_share') => RemoteTrackPublication | undefined
   setVideoQuality: (participantIdentity: string, quality: VideoQuality, source?: 'camera' | 'screen_share') => void
 
@@ -634,17 +634,54 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       // Get the appropriate preset based on quality setting
       const preset = customScreenSharePresets[screenShareQuality.value]
 
-      const options: ScreenShareCaptureOptions = {
-        resolution: preset.resolution,
-        audio: true
+      try {
+        // Use createScreenTracks to request audio along with video
+        // This allows browser tab audio sharing when the user selects a tab
+        const tracks = await room.value.localParticipant.createScreenTracks({
+          resolution: preset.resolution,
+          audio: true // Request audio track for browser tab audio
+        })
+
+        // Publish all tracks (video and potentially audio if tab was selected)
+        await Promise.all(tracks.map((track) => {
+          return room.value!.localParticipant.publishTrack(track, {
+            // Use appropriate encoding settings based on track type
+            ...(track.kind === 'video'
+              ? {
+                  simulcastLayers: [
+                    ScreenSharePresets.h720fps15,
+                    ScreenSharePresets.h1080fps15,
+                    ScreenSharePresets.h1080fps30,
+                    customScreenSharePresets.gaming
+                  ],
+                  videoCodec: 'vp9'
+                }
+              : {
+                  // Audio track settings
+                  audioBitrate: 128_000, // High quality audio for screen share
+                  dtx: false // Don't use discontinuous transmission for screen audio
+                })
+          })
+        }))
+      } catch (error) {
+        console.error('[LiveKit] Failed to enable screen share:', error)
+        throw error
+      }
+    } else {
+      // Unpublish all screen share tracks (both video and audio)
+      const localParticipant = room.value.localParticipant
+      const screenVideoTrack = localParticipant.getTrackPublication(Track.Source.ScreenShare)
+      const screenAudioTrack = localParticipant.getTrackPublication(Track.Source.ScreenShareAudio)
+
+      const unpublishPromises = []
+      if (screenVideoTrack) {
+        unpublishPromises.push(localParticipant.unpublishTrack(screenVideoTrack.track!))
+      }
+      if (screenAudioTrack) {
+        unpublishPromises.push(localParticipant.unpublishTrack(screenAudioTrack.track!))
       }
 
-      // Note: Bitrate control happens through the simulcast layers and LiveKit's adaptive streaming
-      // The different presets already have optimized bitrate settings
-
-      await room.value.localParticipant.setScreenShareEnabled(true, options)
-    } else {
-      await room.value.localParticipant.setScreenShareEnabled(false)
+      await Promise.all(unpublishPromises)
     }
 
     updateLocalMediaState()
@@ -732,6 +769,11 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     return tracks.microphone
   }
 
+  function getScreenShareAudioTrack(participantIdentity: string): RemoteAudioTrack | LocalAudioTrack | undefined {
+    const tracks = getParticipantTracks(participantIdentity)
+    return tracks.screenShareAudio
+  }
+
   function getVideoPublication(participantIdentity: string, source: 'camera' | 'screen_share' = 'camera'): RemoteTrackPublication | undefined {
     const pubMap = participantPublications.value.get(participantIdentity)
     if (!pubMap) return undefined
@@ -814,6 +856,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     getParticipantTracks,
     getVideoTrack,
     getAudioTrack,
+    getScreenShareAudioTrack,
     getVideoPublication,
     setVideoQuality,
 

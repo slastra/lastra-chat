@@ -40,6 +40,15 @@ const legacyChat = {
   }
 }
 
+// Computed property to get all participants for audio rendering
+const allParticipants = computed(() => {
+  const participants = [...liveKitRoom.remoteParticipants.value]
+  if (liveKitRoom.localParticipant.value) {
+    participants.push(liveKitRoom.localParticipant.value)
+  }
+  return participants
+})
+
 // Provide instances to child components
 provide('liveKitRoom', liveKitRoom)
 provide('liveKitChat', liveKitChat)
@@ -135,119 +144,137 @@ const handleScreenQualityChange = (quality: 'gaming' | 'presentation' | 'balance
 </script>
 
 <template>
-  <UDashboardGroup v-if="isReady">
-    <UDashboardSidebar
-      resizable
-      :min-size="22"
-      :default-size="22"
-      :max-size="40"
-      mode="slideover"
-      class="bg-elevated/50"
-    >
-      <template #header>
-        <div class="flex items-center justify-between w-full  gap-2">
-          <h3 class="font-semibold ">
-            Online Users
-          </h3>
-          <UBadge
-            :label="String(liveKitRoom.participantCount.value)"
-            color="success"
-            variant="subtle"
-          />
-        </div>
-      </template>
-
-      <div class="flex-1 min-h-0 w-full">
-        <ChatUserList />
-      </div>
-
-      <template #footer>
-        <div class="w-full py-4">
-          <StreamingMenu
-            :webcam-enabled="liveKitRoom.isCameraEnabled.value"
-            :mic-enabled="liveKitRoom.isMicrophoneEnabled.value"
-            :screen-enabled="liveKitRoom.isScreenShareEnabled.value"
-            :supports-speaker-selection="liveKitRoom.supportsSpeakerSelection.value"
-            :selected-camera="liveKitRoom.selectedCamera.value ?? undefined"
-            :selected-microphone="liveKitRoom.selectedMicrophone.value ?? undefined"
-            :selected-speaker="liveKitRoom.selectedSpeaker.value ?? undefined"
-            :screen-share-quality="liveKitRoom.screenShareQuality.value"
-            @webcam-toggle="handleWebcamToggle"
-            @mic-toggle="handleMicToggle"
-            @screen-toggle="handleScreenToggle"
-            @device-change="handleDeviceChange"
-            @screen-quality-change="handleScreenQualityChange"
-          />
-          <!-- Audio Level Display -->
-          <div
-            v-if="liveKitRoom.isMicrophoneEnabled.value"
-            class="mt-3 space-y-1"
-          >
-            <div class="flex items-center justify-between text-xs text-muted">
-              <span>Audio Level</span>
-              <span>{{ liveKitRoom.audioLevel.value }}%</span>
-            </div>
-            <UProgress
-              :model-value="liveKitRoom.audioLevel.value"
-              :max="100"
-              size="sm"
-              :color="liveKitRoom.audioLevel.value > 80 ? 'error' : liveKitRoom.audioLevel.value > 50 ? 'warning' : 'primary'"
+  <div>
+    <UDashboardGroup v-if="isReady">
+      <UDashboardSidebar
+        resizable
+        :min-size="22"
+        :default-size="22"
+        :max-size="40"
+        mode="slideover"
+        class="bg-elevated/50"
+      >
+        <template #header>
+          <div class="flex items-center justify-between w-full  gap-2">
+            <h3 class="font-semibold ">
+              Online Users
+            </h3>
+            <UBadge
+              :label="String(liveKitRoom.participantCount.value)"
+              color="success"
+              variant="subtle"
             />
           </div>
+        </template>
+
+        <div class="flex-1 min-h-0 w-full">
+          <ChatUserList />
         </div>
-      </template>
-    </UDashboardSidebar>
 
-    <UDashboardPanel id="chat" class="relative" :ui="{ body: 'p-0 sm:p-0' }">
-      <template #header>
-        <UDashboardNavbar title="Lastra Chat">
-          <template #right>
-            <div class="flex items-center gap-3">
-              <UBadge :color="liveKitRoom.isConnected.value ? 'success' : liveKitRoom.isConnecting.value ? 'warning' : 'error'" variant="subtle">
-                {{ liveKitRoom.isConnected.value ? 'connected' : liveKitRoom.isConnecting.value ? 'connecting' : 'disconnected' }}
-              </UBadge>
+        <template #footer>
+          <div class="w-full py-4">
+            <StreamingMenu
+              :webcam-enabled="liveKitRoom.isCameraEnabled.value"
+              :mic-enabled="liveKitRoom.isMicrophoneEnabled.value"
+              :screen-enabled="liveKitRoom.isScreenShareEnabled.value"
+              :supports-speaker-selection="liveKitRoom.supportsSpeakerSelection.value"
+              :selected-camera="liveKitRoom.selectedCamera.value ?? undefined"
+              :selected-microphone="liveKitRoom.selectedMicrophone.value ?? undefined"
+              :selected-speaker="liveKitRoom.selectedSpeaker.value ?? undefined"
+              :screen-share-quality="liveKitRoom.screenShareQuality.value"
+              @webcam-toggle="handleWebcamToggle"
+              @mic-toggle="handleMicToggle"
+              @screen-toggle="handleScreenToggle"
+              @device-change="handleDeviceChange"
+              @screen-quality-change="handleScreenQualityChange"
+            />
+            <!-- Audio Level Display -->
+            <div
+              v-if="liveKitRoom.isMicrophoneEnabled.value"
+              class="mt-3 space-y-1"
+            >
+              <div class="flex items-center justify-between text-xs text-muted">
+                <span>Audio Level</span>
+                <span>{{ liveKitRoom.audioLevel.value }}%</span>
+              </div>
+              <UProgress
+                :model-value="liveKitRoom.audioLevel.value"
+                :max="100"
+                size="sm"
+                :color="liveKitRoom.audioLevel.value > 80 ? 'error' : liveKitRoom.audioLevel.value > 50 ? 'warning' : 'primary'"
+              />
+            </div>
+          </div>
+        </template>
+      </UDashboardSidebar>
 
-              <!-- Sound Settings Popover -->
-              <UPopover>
+      <UDashboardPanel id="chat" class="relative" :ui="{ body: 'p-0 sm:p-0' }">
+        <template #header>
+          <UDashboardNavbar title="Lastra Chat">
+            <template #right>
+              <div class="flex items-center gap-3">
+                <UBadge :color="liveKitRoom.isConnected.value ? 'success' : liveKitRoom.isConnecting.value ? 'warning' : 'error'" variant="subtle">
+                  {{ liveKitRoom.isConnected.value ? 'connected' : liveKitRoom.isConnecting.value ? 'connecting' : 'disconnected' }}
+                </UBadge>
+
+                <!-- Sound Settings Popover -->
+                <UPopover>
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    icon="i-lucide-volume-2"
+                  />
+
+                  <template #content>
+                    <div class="p-4 w-96">
+                      <SoundSettings />
+                    </div>
+                  </template>
+                </UPopover>
+
                 <UButton
                   color="neutral"
                   variant="ghost"
-                  icon="i-lucide-volume-2"
+                  icon="i-lucide-log-out"
+                  @click="async () => { await liveKitRoom.disconnect(); legacyChat.clearUser(); navigateTo('/') }"
                 />
+              </div>
+            </template>
+          </UDashboardNavbar>
+        </template>
 
-                <template #content>
-                  <div class="p-4 w-96">
-                    <SoundSettings />
-                  </div>
-                </template>
-              </UPopover>
-
-              <UButton
-                color="neutral"
-                variant="ghost"
-                icon="i-lucide-log-out"
-                @click="async () => { await liveKitRoom.disconnect(); legacyChat.clearUser(); navigateTo('/') }"
-              />
+        <template #body>
+          <div class="h-full flex flex-col">
+            <ChatMessageList />
+            <div class="px-4">
+              <ChatInput />
             </div>
-          </template>
-        </UDashboardNavbar>
-      </template>
-
-      <template #body>
-        <div class="h-full flex flex-col">
-          <ChatMessageList />
-          <div class="px-4">
-            <ChatInput />
           </div>
-        </div>
-      </template>
-    </UDashboardPanel>
+        </template>
+      </UDashboardPanel>
 
-    <!-- Audio Enable Prompt -->
-  </UDashboardGroup>
-  <div v-else class="flex items-center justify-center h-screen">
-    <UCard>
-      <p>Just a moment...</p>
-    </UCard>
+      <!-- Audio Enable Prompt -->
+    </UDashboardGroup>
+
+    <!-- Screen Share Audio Rendering (hidden, for audio playback only) -->
+    <div v-if="isReady" class="hidden">
+      <!-- Render screen share audio for all participants including local -->
+      <div v-for="participant in allParticipants" :key="`screen-audio-${participant.identity}`">
+        <VideoTrack
+          v-if="participant.tracks?.screenShareAudio"
+          :track="liveKitRoom.getScreenShareAudioTrack(participant.identity)"
+          :participant-identity="participant.identity"
+          :is-local="participant.identity === liveKitRoom.localParticipant.value?.identity"
+          :muted="false"
+          :autoplay="true"
+        />
+      </div>
+    </div>
+
+    <div v-else class="flex items-center justify-center h-screen">
+      <UCard>
+        <p>Just a moment...</p>
+      </UCard>
+    </div>
   </div>
 </template>
