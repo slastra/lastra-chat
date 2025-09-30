@@ -116,19 +116,8 @@ webhook:
 
 ### Reverse Proxy (Caddy)
 ```
-your-domain.com {
-    @websockets {
-        header Connection *Upgrade*
-        header Upgrade websocket
-    }
-
-    handle @websockets {
-        reverse_proxy localhost:7880
-    }
-
-    handle {
-        reverse_proxy localhost:3000
-    }
+livekit.lastra.us {
+    reverse_proxy localhost:7880
 }
 ```
 
