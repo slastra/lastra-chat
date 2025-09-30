@@ -1,43 +1,17 @@
 import { randomUUID } from 'crypto'
-import { writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { existsSync } from 'fs'
+import { ALLOWED_FILE_TYPES } from '../constants/fileTypes'
 
-const ALLOWED_TYPES = {
-  'image/jpeg': { ext: '.jpg', maxSize: 10 * 1024 * 1024, category: 'image' },
-  'image/png': { ext: '.png', maxSize: 10 * 1024 * 1024, category: 'image' },
-  'image/gif': { ext: '.gif', maxSize: 10 * 1024 * 1024, category: 'image' },
-  'image/webp': { ext: '.webp', maxSize: 10 * 1024 * 1024, category: 'image' },
-  'image/svg+xml': { ext: '.svg', maxSize: 2 * 1024 * 1024, category: 'image' },
-
-  'audio/mpeg': { ext: '.mp3', maxSize: 25 * 1024 * 1024, category: 'audio' },
-  'audio/wav': { ext: '.wav', maxSize: 25 * 1024 * 1024, category: 'audio' },
-  'audio/ogg': { ext: '.ogg', maxSize: 25 * 1024 * 1024, category: 'audio' },
-  'audio/mp4': { ext: '.m4a', maxSize: 25 * 1024 * 1024, category: 'audio' },
-  'audio/webm': { ext: '.webm', maxSize: 25 * 1024 * 1024, category: 'audio' },
-
-  'video/mp4': { ext: '.mp4', maxSize: 100 * 1024 * 1024, category: 'video' },
-  'video/webm': { ext: '.webm', maxSize: 100 * 1024 * 1024, category: 'video' },
-  'video/quicktime': { ext: '.mov', maxSize: 100 * 1024 * 1024, category: 'video' },
-
-  'application/pdf': { ext: '.pdf', maxSize: 10 * 1024 * 1024, category: 'document' },
-  'text/plain': { ext: '.txt', maxSize: 1 * 1024 * 1024, category: 'document' },
-  'text/markdown': { ext: '.md', maxSize: 1 * 1024 * 1024, category: 'document' },
-  'application/msword': { ext: '.doc', maxSize: 10 * 1024 * 1024, category: 'document' },
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { ext: '.docx', maxSize: 10 * 1024 * 1024, category: 'document' },
-
-  'application/zip': { ext: '.zip', maxSize: 50 * 1024 * 1024, category: 'archive' },
-  'application/x-rar-compressed': { ext: '.rar', maxSize: 50 * 1024 * 1024, category: 'archive' },
-  'application/x-7z-compressed': { ext: '.7z', maxSize: 50 * 1024 * 1024, category: 'archive' },
-  'application/x-tar': { ext: '.tar', maxSize: 50 * 1024 * 1024, category: 'archive' },
-  'application/gzip': { ext: '.gz', maxSize: 50 * 1024 * 1024, category: 'archive' }
+interface UploadedFile {
+  name: string
+  type: string
+  content: string
 }
 
 export default defineEventHandler(async (event) => {
   try {
-    const formData = await readMultipartFormData(event)
+    const { files } = await readBody<{ files: UploadedFile[] }>(event)
 
-    if (!formData || formData.length === 0) {
+    if (!files || files.length === 0) {
       throw createError({
         statusCode: 400,
         statusMessage: 'No files uploaded'
@@ -49,19 +23,17 @@ export default defineEventHandler(async (event) => {
     const year = now.getFullYear().toString()
     const month = (now.getMonth() + 1).toString().padStart(2, '0')
 
-    // Create upload directory
-    const uploadDir = join(process.cwd(), 'public', 'uploads', year, month)
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true })
-    }
-
-    for (const file of formData) {
-      if (!file.filename || !file.data || !file.type) {
+    for (const file of files) {
+      if (!file.name || !file.content || !file.type) {
         continue
       }
 
+      // Decode base64 content to get size
+      const base64Data = file.content.split(',')[1] || file.content
+      const buffer = Buffer.from(base64Data, 'base64')
+
       // Validate file type
-      const allowedType = ALLOWED_TYPES[file.type as keyof typeof ALLOWED_TYPES]
+      const allowedType = ALLOWED_FILE_TYPES[file.type]
       if (!allowedType) {
         throw createError({
           statusCode: 400,
@@ -70,10 +42,10 @@ export default defineEventHandler(async (event) => {
       }
 
       // Validate file size
-      if (file.data.length > allowedType.maxSize) {
+      if (buffer.length > allowedType.maxSize) {
         throw createError({
           statusCode: 400,
-          statusMessage: `File ${file.filename} exceeds maximum size of ${Math.round(allowedType.maxSize / 1024 / 1024)}MB`
+          statusMessage: `File ${file.name} exceeds maximum size of ${Math.round(allowedType.maxSize / 1024 / 1024)}MB`
         })
       }
 
@@ -81,19 +53,32 @@ export default defineEventHandler(async (event) => {
       const fileId = randomUUID()
       const timestamp = Date.now()
       const extension = allowedType.ext
-      const storageFilename = `${fileId}-${timestamp}${extension}`
-      const filePath = join(uploadDir, storageFilename)
+      // Don't include extension here - storeFileLocally adds it automatically from file.name
+      const storageFilename = `${fileId}-${timestamp}`
+      const storagePath = `/${year}/${month}`
 
-      // Save file
-      await writeFile(filePath, file.data)
+      // Save file using nuxt-file-storage
+      const fileToStore = {
+        ...file,
+        size: buffer.length.toString(),
+        lastModified: Date.now().toString()
+      }
+      await storeFileLocally(
+        fileToStore,
+        storageFilename,
+        storagePath
+      )
+
+      // The actual stored filename includes the extension from file.name
+      const actualFilename = `${storageFilename}${extension}`
 
       // Create file metadata
-      const fileUrl = `/uploads/${year}/${month}/${storageFilename}`
+      const fileUrl = `uploads${storagePath}/${actualFilename}`
       uploadedFiles.push({
         url: fileUrl,
-        originalName: file.filename,
+        originalName: file.name,
         mimeType: file.type,
-        size: file.data.length,
+        size: buffer.length,
         type: allowedType.category,
         uploadedAt: now.toISOString()
       })

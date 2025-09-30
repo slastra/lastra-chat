@@ -1,4 +1,5 @@
-import { RoomServiceClient, ParticipantInfo_State } from 'livekit-server-sdk'
+import { ParticipantInfo_State } from 'livekit-server-sdk'
+import { getRoomServiceClient } from '../utils/livekit'
 
 interface CleanupRequest {
   roomName: string
@@ -18,26 +19,8 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get runtime config for API credentials
-    const config = useRuntimeConfig()
-    const { livekitKey, livekitSecret, public: { livekitUrl } } = config
-
-    if (!livekitKey || !livekitSecret || !livekitUrl) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: 'LiveKit credentials not configured'
-      })
-    }
-
-    // Convert WebSocket URL to HTTP URL for API calls
-    const livekitApiUrl = livekitUrl.replace(/^ws:/, 'http:').replace(/^wss:/, 'https:')
-
-    // Create RoomServiceClient to interact with LiveKit server
-    const roomService = new RoomServiceClient(
-      livekitApiUrl,
-      livekitKey,
-      livekitSecret
-    )
+    // Get shared RoomServiceClient
+    const roomService = getRoomServiceClient()
 
     try {
       // List all participants in the room

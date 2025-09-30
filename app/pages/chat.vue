@@ -33,13 +33,6 @@ const liveKitBots = useLiveKitBots({
   userName: userName.value || 'Anonymous'
 })
 
-// Legacy chat compatibility layer for remaining components
-const legacyChat = {
-  clearUser: () => {
-    // Handle user logout
-  }
-}
-
 // Computed property to get all participants for audio rendering
 const allParticipants = computed(() => {
   const participants = [...liveKitRoom.remoteParticipants.value]
@@ -71,7 +64,6 @@ const humanUserCount = computed(() => {
 provide('liveKitRoom', liveKitRoom)
 provide('liveKitChat', liveKitChat)
 provide('liveKitBots', liveKitBots)
-provide('chat', legacyChat)
 
 onMounted(async () => {
   // Middleware handles auth, safe to proceed
@@ -248,7 +240,7 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
                   color="neutral"
                   variant="ghost"
                   icon="i-lucide-log-out"
-                  @click="async () => { await liveKitRoom.disconnect(); legacyChat.clearUser(); navigateTo('/') }"
+                  @click="async () => { await liveKitRoom.disconnect(); navigateTo('/') }"
                 />
               </div>
             </template>

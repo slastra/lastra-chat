@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ChatMessage } from '~/composables/useLiveKitChatState'
+import type { ChatMessage } from '../../shared/types/chat'
 import { useTimeAgo } from '@vueuse/core'
 
 interface FileAttachment {

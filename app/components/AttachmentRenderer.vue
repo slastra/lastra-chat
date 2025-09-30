@@ -109,7 +109,7 @@ const downloadFile = async (attachment: FileAttachment) => {
       <div v-if="attachment.type === 'image'" class="space-y-2">
         <div class="relative group">
           <img
-            :src="attachment.url"
+            :src="`/api/download/${attachment.url}?name=${encodeURIComponent(attachment.originalName)}`"
             :alt="attachment.originalName"
             class="max-w-sm max-h-64 rounded cursor-pointer object-cover transition-transform hover:scale-101"
             loading="lazy"
@@ -137,10 +137,10 @@ const downloadFile = async (attachment: FileAttachment) => {
           <video
             controls
             preload="metadata"
-            :src="attachment.url"
+            :src="`/api/download/${attachment.url}`"
             class="max-w-lg max-h-64 rounded"
           >
-            <source :src="attachment.url" :type="attachment.mimeType">
+            <source :src="`/api/download/${attachment.url}`" :type="attachment.mimeType">
             Your browser does not support the video tag.
           </video>
         </div>
@@ -157,11 +157,11 @@ const downloadFile = async (attachment: FileAttachment) => {
         <audio
           controls
           preload="metadata"
-          :src="attachment.url"
+          :src="`/api/download/${attachment.url}`"
           class="rounded"
           style="width: 400px;"
         >
-          <source :src="attachment.url" :type="attachment.mimeType">
+          <source :src="`/api/download/${attachment.url}`" :type="attachment.mimeType">
           Your browser does not support the audio tag.
         </audio>
         <div class="flex items-center justify-between">

@@ -1,18 +1,5 @@
-import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk'
-
-let roomServiceClient: RoomServiceClient
-
-function getRoomServiceClient() {
-  if (!roomServiceClient) {
-    const config = useRuntimeConfig()
-    roomServiceClient = new RoomServiceClient(
-      config.public.livekitUrl,
-      config.livekitKey,
-      config.livekitSecret
-    )
-  }
-  return roomServiceClient
-}
+import { DataPacket_Kind } from 'livekit-server-sdk'
+import { getRoomServiceClient } from './livekit'
 
 export async function sendBotMessage(
   roomName: string,

@@ -29,17 +29,20 @@ Real-time chat application built with Nuxt 4 and LiveKit, featuring WebRTC-based
 - **Responsive Design**: Mobile-friendly interface with Nuxt UI v4 components
 - **File Upload Modal**: Drag-and-drop or button-based file selection with progress tracking
 - **Rich Media Display**: Inline preview for images, video, and audio files
+- **Fullscreen Video**: Immersive fullscreen viewer with overlayed controls for video streams
+- **Video Quality Stats**: Real-time statistics overlay showing resolution, framerate, and bitrate
 
 ## Technology Stack
 
 - **Framework**: Nuxt 4.1.2, Vue 3.5.21, TypeScript 5.9.2
-- **WebRTC**: LiveKit Server (SFU architecture)
+- **WebRTC**: LiveKit Client 2.15.7, LiveKit Server SDK 2.13.3 (SFU architecture)
 - **UI Library**: Nuxt UI v4.0.0 (stable)
 - **Avatars**: DiceBear Core 9.2.4 with Identicon style
-- **AI Provider**: Google Gemini AI
-- **Real-time**: LiveKit data channels
-- **File Storage**: Local filesystem with organized structure
+- **AI Provider**: Google Generative AI 1.20.0 (Gemini 2.0)
+- **Real-time**: LiveKit data channels for messaging
+- **File Storage**: nuxt-file-storage 0.3.0 with organized date-based structure
 - **Notifications**: ntfy.sh integration
+- **Package Manager**: pnpm 10.15.1
 
 ## Setup
 
@@ -60,12 +63,13 @@ pnpm install
 # .env
 GEMINI_API_KEY=your-gemini-api-key       # Required for AI bots
 GEMINI_MODEL=gemini-2.0-flash-exp        # Default AI model
-LIVEKIT_KEY=your-api-key                 # LiveKit API key
-LIVEKIT_SECRET=your-api-secret           # LiveKit API secret
-LIVEKIT_URL=wss://your-livekit-url       # LiveKit server URL
+LIVEKIT_KEY=devkey                       # LiveKit API key (use 'devkey' for dev mode)
+LIVEKIT_SECRET=secret                    # LiveKit API secret (use 'secret' for dev mode)
+LIVEKIT_URL=ws://localhost:7880          # LiveKit server URL (dev mode)
 NUXT_PUBLIC_SITE_URL=https://lastra.us   # Production URL
 NTFY_TOPIC=your-ntfy-topic               # ntfy.sh topic for notifications
 MY_USERNAME=your-username                # Your username to filter self-notifications
+FILE_STORAGE_MOUNT=./uploads             # File storage directory (optional, defaults to ./uploads)
 ```
 
 ### Development
@@ -177,15 +181,22 @@ pnpm run lint        # ESLint with auto-fix
 - **Archives**: ZIP, RAR, 7Z, TAR, GZ (max 50MB)
 
 ### Storage Structure
-Files are organized by upload date:
+Files are organized by upload date using nuxt-file-storage:
 ```
-public/uploads/
-├── 2024/
+uploads/
+├── 2025/
 │   ├── 01/         # January uploads
 │   ├── 02/         # February uploads
 │   └── ...
 └── [year]/[month]/[uuid-timestamp.ext]
 ```
+
+### File Upload Architecture
+- **Module**: nuxt-file-storage 0.3.0 for production-ready file handling
+- **Upload**: `POST /api/upload` with MIME validation and size limits
+- **Download**: `GET /api/download/[...path]` with original filename preservation
+- **Security**: Sanitized filenames, validated MIME types, absolute path resolution
+- **Environment**: Configurable storage location via `FILE_STORAGE_MOUNT` env variable
 
 ## Avatar System
 
@@ -194,6 +205,31 @@ The application uses DiceBear to generate unique identicon-style avatars:
 - **Unique**: Different usernames create distinct geometric patterns
 - **Lightweight**: SVG-based avatars with small file sizes
 - **Accessible**: Proper alt text and semantic markup
+- **Implementation**: `useDiceBearAvatar` composable with identicon style
+
+## Architecture
+
+### Composables
+- **useLiveKitRoom**: Core room connection, media tracks, participant management
+- **useLiveKitChat**: Chat messaging via data channels, typing indicators
+- **useLiveKitBots**: AI bot integration with LiveKit data channels
+- **useDiceBearAvatar**: Avatar generation using DiceBear identicon style
+- **useSoundManager**: Audio notification system with localStorage preferences
+- **useUser**: User state management with persistent storage
+
+### Type Organization
+- `/shared/types/` - Types shared between client and server
+  - `chat.ts` - Chat message interfaces and conversion utilities
+  - `webrtc.ts` - WebRTC-related interfaces
+- `/server/types/` - Server-only type definitions
+- `/server/constants/` - Shared constants like file type definitions
+- `/server/utils/` - Server utilities including LiveKit client singleton
+
+### Recent Optimizations
+- **Code Reduction**: 755+ lines of dead code removed, 16 files deleted
+- **Shared Utilities**: Centralized RoomServiceClient, file type definitions
+- **Legacy Removal**: Eliminated bridge layer and defunct slash command system
+- **Type Safety**: Shared type definitions replacing redundant conversion layers
 
 ## License
 

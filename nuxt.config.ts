@@ -6,7 +6,8 @@ export default defineNuxtConfig({
     '@nuxt/fonts',
     '@nuxtjs/mdc',
     '@vueuse/nuxt',
-    '@nuxt/content'
+    '@nuxt/content',
+    'nuxt-file-storage'
   ],
 
   ssr: false,
@@ -66,5 +67,9 @@ export default defineNuxtConfig({
         braceStyle: '1tbs'
       }
     }
+  },
+
+  fileStorage: {
+    mount: process.env.FILE_STORAGE_MOUNT || './uploads'
   }
 })

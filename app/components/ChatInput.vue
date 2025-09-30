@@ -16,15 +16,17 @@ const liveKitChat = inject('liveKitChat') as UseLiveKitChatReturn
 const liveKitRoom = inject('liveKitRoom') as UseLiveKitRoomReturn
 const liveKitBots = inject('liveKitBots') as { checkOutgoingMessage?: (content: string, roomName: string) => Promise<void> }
 
-// Use LiveKit bridge for compatibility
-const chatState = useLiveKitChatState(liveKitChat, liveKitRoom)
-const { connectionStatus } = chatState
+// Compute connection status directly from LiveKit room
+const connectionStatus = computed(() => {
+  if (liveKitRoom.isConnected.value) return 'connected'
+  if (liveKitRoom.isConnecting.value) return 'connecting'
+  return 'disconnected'
+})
 
 // Use LiveKit chat methods
 const sendMessage = liveKitChat.sendMessage
 const sendTypingIndicator = liveKitChat.sendTypingIndicator
 
-const { isCommand, executeCommand } = useSlashCommands()
 const { canPlayAudio, enableAudio } = useSoundManager()
 
 const input = ref('')
@@ -63,12 +65,6 @@ const sendMessageWithAttachments = async (message: string, attachments?: FileUpl
   if (typingTimer) {
     clearTimeout(typingTimer)
     typingTimer = null
-  }
-
-  // Check if it's a slash command
-  if (isCommand(message)) {
-    await executeCommand(message)
-    return
   }
 
   // Create message data with attachments

@@ -45,10 +45,20 @@ const uploadFiles = async () => {
   uploadProgress.value = 0
 
   try {
-    const formData = new FormData()
-    selectedFiles.value.forEach((file) => {
-      formData.append('files', file)
-    })
+    // Convert selected files to nuxt-file-storage format
+    const filePromises = selectedFiles.value.map(file => new Promise<{ name: string, type: string, content: string }>((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        resolve({
+          name: file.name,
+          type: file.type,
+          content: reader.result as string
+        })
+      }
+      reader.readAsDataURL(file)
+    }))
+
+    const filesData = await Promise.all(filePromises)
 
     // Simulate progress (since we don't have real progress from the server)
     const progressInterval = setInterval(() => {
@@ -59,7 +69,7 @@ const uploadFiles = async () => {
 
     const response = await $fetch<UploadResponse>('/api/upload', {
       method: 'POST',
-      body: formData
+      body: { files: filesData }
     })
 
     clearInterval(progressInterval)

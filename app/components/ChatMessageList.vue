@@ -1,19 +1,29 @@
 <script setup lang="ts">
 import type { UseLiveKitChatReturn } from '../composables/useLiveKitChat'
 import type { UseLiveKitRoomReturn } from '../composables/useLiveKitRoom'
+import type { ChatMessage } from '../../shared/types/chat'
+import { convertToLegacyFormat } from '../../shared/types/chat'
 
 const liveKitChat = inject('liveKitChat') as UseLiveKitChatReturn
 const liveKitRoom = inject('liveKitRoom') as UseLiveKitRoomReturn
 
-// Use LiveKit bridge to provide legacy compatibility
-const chatState = useLiveKitChatState(liveKitChat, liveKitRoom)
-const { messages, connectionStatus } = chatState
+// Convert LiveKit messages to legacy ChatMessage format
+const messages = computed(() =>
+  liveKitChat.messages.value.map(convertToLegacyFormat)
+)
+
+// Compute connection status from LiveKit room state
+const connectionStatus = computed(() => {
+  if (liveKitRoom.isConnected.value) return 'connected'
+  if (liveKitRoom.isConnecting.value) return 'connecting'
+  return 'disconnected'
+})
 
 const messagesContainer = ref<HTMLElement>()
 
 // Filter out empty bot messages (during initial streaming)
 const visibleMessages = computed(() =>
-  messages.value.filter(m => m.type !== 'bot' || m.content.trim().length > 0)
+  messages.value.filter((m: ChatMessage) => m.type !== 'bot' || m.content.trim().length > 0)
 )
 
 // Simple scroll to bottom function

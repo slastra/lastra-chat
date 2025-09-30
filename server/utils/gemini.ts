@@ -106,16 +106,3 @@ Remember to keep your response brief (1-3 sentences) and in character as ${bot.n
     return fallbacks[Math.floor(Math.random() * fallbacks.length)]!
   }
 }
-
-// Check if bot should randomly interject
-export function shouldBotInterject(bot: BotConfig, userCount: number): boolean {
-  // Never interject if shyness is 1
-  if (bot.shyness >= 1) return false
-
-  // Calculate probability based on shyness and user count
-  const factor = 0.5
-  const baseProbability = 1 / (1 + factor * (userCount - 1))
-  const probability = baseProbability * (1 - bot.shyness)
-
-  return Math.random() < probability
-}
