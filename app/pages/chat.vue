@@ -157,7 +157,7 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
         :min-size="22"
         :default-size="22"
         :max-size="40"
-        mode="slideover"
+        mode="modal"
         class="bg-elevated/50"
       >
         <template #header>
