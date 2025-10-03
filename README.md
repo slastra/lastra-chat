@@ -13,6 +13,7 @@ Real-time chat application built with Nuxt 4 and LiveKit, featuring WebRTC-based
 - **Device Management**: Camera, microphone, and speaker selection with live switching
 - **Adaptive Streaming**: Dynamic video quality based on network conditions
 - **Click-to-Download**: File attachments with original filename preservation
+- **GridStack Video Layout**: Draggable, resizable video tiles with persistent positions
 
 ### AI Integration
 - **Multiple AI Bots**: Configurable bots powered by Google Gemini
