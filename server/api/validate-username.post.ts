@@ -36,34 +36,22 @@ export default defineEventHandler(async (event) => {
       // List all participants in the room
       const participants = await roomService.listParticipants(roomName)
 
-      console.log('[Username Validation] Room participants:', participants.map(p => ({
-        name: p.name,
-        identity: p.identity,
-        state: p.state,
-        joinedAt: p.joinedAt,
-        metadata: p.metadata
-      })))
-      console.log('[Username Validation] Checking username:', trimmedUsername, 'clientId:', clientId)
-
       // Check if username is already taken (case-insensitive)
       // Note: In LiveKit, 'identity' is the unique identifier, which we set to the username
       const lowerUsername = trimmedUsername.toLowerCase()
       const nameExists = participants.some((participant) => {
         // Skip disconnected participants (they'll be removed by LiveKit after timeout)
         if (participant.state === ParticipantInfo_State.DISCONNECTED) {
-          console.log('[Username Validation] Skipping disconnected participant:', participant.identity)
           return false
         }
 
         // Check participant identity (which we set to the username)
         const participantIdentity = participant.identity?.toLowerCase()
-        console.log('[Username Validation] Comparing identity:', participantIdentity, 'vs', lowerUsername, 'state:', participant.state)
         if (participantIdentity === lowerUsername) {
           // If clientId provided, check if it's the same user reconnecting
           if (clientId && participant.metadata) {
             try {
               const metadata = JSON.parse(participant.metadata)
-              console.log('[Username Validation] Metadata check:', metadata.userId, 'vs', clientId)
               if (metadata.userId === clientId) {
                 return false // Allow same user to reconnect with same name
               }

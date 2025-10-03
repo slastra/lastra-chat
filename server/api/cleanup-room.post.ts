@@ -36,14 +36,11 @@ export default defineEventHandler(async (event) => {
           const joinedAt = participant.joinedAt ? Number(participant.joinedAt) * 1000 : 0
           const idleTime = currentTime - joinedAt
 
-          console.log(`[Room Cleanup] Checking ${participant.identity}: state=${participant.state}, idle=${idleTime}ms`)
-
           if (idleTime > maxIdleMs) {
             try {
               // Remove the participant from the room
               await roomService.removeParticipant(roomName, participant.identity)
               removedParticipants.push(participant.identity)
-              console.log(`[Room Cleanup] Removed stale participant: ${participant.identity}`)
             } catch (removeError) {
               console.error(`[Room Cleanup] Failed to remove ${participant.identity}:`, removeError)
             }

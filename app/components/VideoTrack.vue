@@ -77,7 +77,7 @@ watch(() => props.track, async (newTrack, oldTrack) => {
     await nextTick() // Wait for v-if to render the element
     attachTrack()
   }
-}, { immediate: false })
+}, { immediate: true })
 
 // Re-attach track when component becomes visible again
 const reattachTrack = () => {

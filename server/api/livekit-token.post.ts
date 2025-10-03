@@ -42,29 +42,17 @@ export default defineEventHandler(async (event) => {
       const participants = await roomService.listParticipants(roomName)
       const lowerParticipantName = participantName.toLowerCase()
 
-      console.log('[LiveKit Token] Room participants:', participants.map(p => ({
-        name: p.name,
-        identity: p.identity,
-        state: p.state,
-        joinedAt: p.joinedAt,
-        metadata: p.metadata
-      })))
-      console.log('[LiveKit Token] Checking participantName:', participantName)
-
       const nameExists = participants.some((p) => {
         // Skip disconnected participants
         if (p.state === ParticipantInfo_State.DISCONNECTED) {
-          console.log('[LiveKit Token] Skipping disconnected participant:', p.identity)
           return false
         }
 
-        console.log('[LiveKit Token] Comparing identity:', p.identity?.toLowerCase(), 'vs', lowerParticipantName, 'state:', p.state)
         if (p.identity?.toLowerCase() === lowerParticipantName) {
           // Check if it's the same user reconnecting
           if (participantMetadata && p.metadata) {
             try {
               const existingMeta = JSON.parse(p.metadata)
-              console.log('[LiveKit Token] Metadata check:', existingMeta.userId, 'vs', participantMetadata.userId)
               if (existingMeta.userId === participantMetadata.userId) {
                 return false // Allow reconnection
               }

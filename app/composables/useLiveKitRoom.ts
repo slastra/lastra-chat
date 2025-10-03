@@ -23,6 +23,8 @@ import type {
   VideoQuality
 } from 'livekit-client'
 
+import type { ParticipantTracks } from './useParticipantTracking'
+
 export interface UseLiveKitRoomOptions {
   roomName: string
   participantName: string
@@ -40,12 +42,7 @@ export interface LiveKitParticipant {
   isScreenShareEnabled: boolean
   audioLevel: number
   connectionQuality: 'excellent' | 'good' | 'poor' | 'unknown'
-  tracks: {
-    camera?: RemoteVideoTrack | LocalVideoTrack
-    microphone?: RemoteAudioTrack | LocalAudioTrack
-    screenShare?: RemoteVideoTrack | LocalVideoTrack
-    screenShareAudio?: RemoteAudioTrack | LocalAudioTrack
-  }
+  tracks: ParticipantTracks
 }
 
 export interface UseLiveKitRoomReturn {
@@ -95,7 +92,7 @@ export interface UseLiveKitRoomReturn {
   refreshDevices: () => Promise<void>
 
   // Track management
-  getParticipantTracks: (participantIdentity: string) => LiveKitParticipant['tracks']
+  getParticipantTracks: (participantIdentity: string) => ParticipantTracks
   getVideoTrack: (participantIdentity: string, source?: 'camera' | 'screen_share') => RemoteVideoTrack | LocalVideoTrack | undefined
   getAudioTrack: (participantIdentity: string) => RemoteAudioTrack | LocalAudioTrack | undefined
   getScreenShareAudioTrack: (participantIdentity: string) => RemoteAudioTrack | LocalAudioTrack | undefined
@@ -124,33 +121,29 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
   const isScreenShareEnabled = ref(false)
   const audioLevel = ref(0)
 
-  // Device management
-  const cameras = ref<MediaDeviceInfo[]>([])
-  const microphones = ref<MediaDeviceInfo[]>([])
-  const speakers = ref<MediaDeviceInfo[]>([])
-  const selectedCamera = ref<string | null>(null)
-  const selectedMicrophone = ref<string | null>(null)
-  const selectedSpeaker = ref<string | null>(null)
+  // Composables for separated concerns
+  const audioMonitoring = useAudioLevelMonitoring()
+  const deviceManagement = useDeviceManagement()
+  const participantTracking = useParticipantTracking()
+  const eventEmitter = useEventEmitter()
 
-  // Browser support detection
-  const supportsSpeakerSelection = computed(() => {
-    if (!import.meta.client) return false
-    // Check if setSinkId is available on HTMLMediaElement
-    const testElement = document.createElement('audio')
-    return 'setSinkId' in testElement
-  })
-
-  // Participants state with tracks and connection quality
-  const participantTracks = ref<Map<string, LiveKitParticipant['tracks']>>(new Map())
-  const participantPublications = ref<Map<string, Map<Track.Source, RemoteTrackPublication>>>(new Map())
+  // Connection quality state
   const participantConnectionQuality = ref<Map<string, ConnectionQuality>>(new Map())
-  const participantAudioLevels = ref<Map<string, number>>(new Map())
 
-  // Reactive participant list to ensure UI updates
-  const remoteParticipantIdentities = ref<Set<string>>(new Set())
+  function clearParticipantState() {
+    participantTracking.clearAll()
+    participantConnectionQuality.value.clear()
+    audioMonitoring.clearAll()
+    audioLevel.value = 0
+  }
 
-  // Event handlers map
-  const eventHandlers = new Map<string, Set<(...args: unknown[]) => void>>()
+  function getRoomOrThrow(): Room {
+    const currentRoom = room.value
+    if (!currentRoom) {
+      throw new Error('Room not connected')
+    }
+    return currentRoom as Room
+  }
 
   // Computed properties
   const isConnected = computed(() =>
@@ -165,7 +158,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     if (!room.value?.localParticipant) return null
 
     const participant = room.value.localParticipant
-    const tracks = participantTracks.value.get(participant.identity) || {}
+    const tracks = participantTracking.getTracks(participant.identity)
 
     return {
       identity: participant.identity,
@@ -176,12 +169,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       isScreenShareEnabled: participant.isScreenShareEnabled,
       audioLevel: audioLevel.value,
       connectionQuality: 'excellent', // Local participant always has excellent quality
-      tracks: tracks as {
-        camera?: RemoteVideoTrack | LocalVideoTrack
-        microphone?: RemoteAudioTrack | LocalAudioTrack
-        screenShare?: RemoteVideoTrack | LocalVideoTrack
-        screenShareAudio?: RemoteAudioTrack | LocalAudioTrack
-      }
+      tracks
     }
   })
 
@@ -189,13 +177,13 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     if (!room.value) return []
 
     // Use our reactive participant list to trigger updates
-    const participantIds = Array.from(remoteParticipantIdentities.value)
+    const participantIds = Array.from(participantTracking.remoteParticipantIdentities.value)
     return participantIds.map((identity) => {
       const participant = room.value!.remoteParticipants.get(identity)
       if (!participant) return null
-      const tracks = participantTracks.value.get(participant.identity) || {}
+      const tracks = participantTracking.getTracks(participant.identity)
       const quality = participantConnectionQuality.value.get(participant.identity)
-      const audioLevel = participantAudioLevels.value.get(participant.identity) || 0
+      const audioLevelValue = audioMonitoring.getLevel(participant.identity)
 
       // Map LiveKit ConnectionQuality to our interface
       let connectionQuality: 'excellent' | 'good' | 'poor' | 'unknown' = 'unknown'
@@ -210,14 +198,9 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
         isCameraEnabled: participant.isCameraEnabled,
         isMicrophoneEnabled: participant.isMicrophoneEnabled,
         isScreenShareEnabled: participant.isScreenShareEnabled,
-        audioLevel,
+        audioLevel: audioLevelValue,
         connectionQuality,
-        tracks: tracks as {
-          camera?: RemoteVideoTrack | LocalVideoTrack
-          microphone?: RemoteAudioTrack | LocalAudioTrack
-          screenShare?: RemoteVideoTrack | LocalVideoTrack
-          screenShareAudio?: RemoteAudioTrack | LocalAudioTrack
-        }
+        tracks
       }
     }).filter(Boolean) as LiveKitParticipant[]
   })
@@ -253,227 +236,135 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       }
     })
 
-    // Room events
-    newRoom.on(RoomEvent.Connected, () => {
-      connectionState.value = ConnectionState.Connected
-      roomState.value = newRoom.state
-      error.value = null
-      emitEvent('connected')
-    })
-
-    newRoom.on(RoomEvent.Disconnected, (reason) => {
-      connectionState.value = ConnectionState.Disconnected
-      roomState.value = newRoom.state
-      emitEvent('disconnected', reason)
-    })
-
-    newRoom.on(RoomEvent.Reconnecting, () => {
-      connectionState.value = ConnectionState.Reconnecting
-      emitEvent('reconnecting')
-    })
-
-    newRoom.on(RoomEvent.Reconnected, () => {
-      connectionState.value = ConnectionState.Connected
-      roomState.value = newRoom.state
-      error.value = null
-      emitEvent('reconnected')
-    })
-
-    // Participant events
-    newRoom.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
-      // Add to reactive participant list
-      remoteParticipantIdentities.value.add(participant.identity)
-      emitEvent('participantConnected', participant)
-    })
-
-    newRoom.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
-      // Remove from reactive participant list
-      remoteParticipantIdentities.value.delete(participant.identity)
-      // Clean up publications
-      participantPublications.value.delete(participant.identity)
-      emitEvent('participantDisconnected', participant)
-    })
-
-    // Track events
-    newRoom.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: TrackPublication, participant: RemoteParticipant) => {
-      updateParticipantTracks(participant.identity, track, publication.source, 'add')
-
-      // Store the publication for quality control
-      if (publication.kind === Track.Kind.Video) {
-        if (!participantPublications.value.has(participant.identity)) {
-          participantPublications.value.set(participant.identity, new Map())
-        }
-        const pubMap = participantPublications.value.get(participant.identity)!
-        pubMap.set(publication.source, publication as RemoteTrackPublication)
-      }
-
-      setupAudioLevelMonitoring(track, participant.identity)
-      emitEvent('trackSubscribed', track, publication, participant)
-    })
-
-    // Track mute events - handle camera enable/disable without unpublish
-    newRoom.on(RoomEvent.TrackMuted, (publication: TrackPublication, participant: Participant) => {
-      // Handle camera tracks - remove from map when muted
-      if (publication.kind === Track.Kind.Video && publication.track && publication.source === Track.Source.Camera) {
-        updateParticipantTracks(participant.identity, publication.track as RemoteTrack | LocalVideoTrack, publication.source, 'remove')
-      } else if (publication.kind === Track.Kind.Audio && publication.track) {
-        // Handle audio tracks - trigger reactive update without removing track
-        // Force a reactive update by recreating the tracks object
-        const tracks = participantTracks.value.get(participant.identity) || {}
-        participantTracks.value.set(participant.identity, { ...tracks })
-      }
-      emitEvent('trackMuted', publication, participant)
-    })
-
-    newRoom.on(RoomEvent.TrackUnmuted, (publication: TrackPublication, participant: Participant) => {
-      // Handle camera tracks - add back to map when unmuted
-      if (publication.kind === Track.Kind.Video && publication.track && publication.source === Track.Source.Camera) {
-        updateParticipantTracks(participant.identity, publication.track as RemoteTrack | LocalVideoTrack, publication.source, 'add')
-        if (participant === newRoom.localParticipant) {
-          setupAudioLevelMonitoring(publication.track as LocalVideoTrack, participant.identity)
-        }
-      } else if (publication.kind === Track.Kind.Audio && publication.track) {
-        // Handle audio tracks - trigger reactive update without modifying track
-        // Force a reactive update by recreating the tracks object
-        const tracks = participantTracks.value.get(participant.identity) || {}
-        participantTracks.value.set(participant.identity, { ...tracks })
-      }
-      emitEvent('trackUnmuted', publication, participant)
-    })
-
-    newRoom.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, publication: TrackPublication, participant: RemoteParticipant) => {
-      updateParticipantTracks(participant.identity, track, publication.source, 'remove')
-      emitEvent('trackUnsubscribed', track, publication, participant)
-    })
-
-    newRoom.on(RoomEvent.LocalTrackPublished, (publication: TrackPublication, participant: LocalParticipant) => {
-      if (publication.track) {
-        updateParticipantTracks(participant.identity, publication.track as LocalAudioTrack | LocalVideoTrack, publication.source, 'add')
-        setupAudioLevelMonitoring(publication.track as LocalAudioTrack | LocalVideoTrack, participant.identity)
-      }
-      updateLocalMediaState()
-      emitEvent('localTrackPublished', publication, participant)
-    })
-
-    newRoom.on(RoomEvent.LocalTrackUnpublished, (publication: TrackPublication, participant: LocalParticipant) => {
-      if (publication.track) {
-        updateParticipantTracks(participant.identity, publication.track as LocalAudioTrack | LocalVideoTrack, publication.source, 'remove')
-      }
-      updateLocalMediaState()
-      emitEvent('localTrackUnpublished', publication, participant)
-    })
-
-    // Connection quality monitoring
-    newRoom.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
-      const identity = participant.identity
-      participantConnectionQuality.value.set(identity, quality)
-      emitEvent('connectionQualityChanged', quality, participant)
-    })
-
-    // Audio level monitoring via active speakers
-    newRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
-      // Reset all audio levels to 0
-      participantAudioLevels.value.forEach((_, identity) => {
-        participantAudioLevels.value.set(identity, 0)
-      })
-
-      // Set speaking participants to a higher level
-      speakers.forEach((speaker) => {
-        participantAudioLevels.value.set(speaker.identity, 75) // 75% indicates speaking
-
-        // Update local audio level if it's the local participant
-        if (speaker.identity === newRoom.localParticipant.identity) {
-          audioLevel.value = 75
-        }
-      })
-
-      // If no speakers, ensure local participant shows 0
-      if (speakers.length === 0 && newRoom.localParticipant) {
-        audioLevel.value = 0
-      }
-    })
-
-    // Participant disconnection cleanup
-    newRoom.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
-      // Clean up participant data
-      participantTracks.value.delete(participant.identity)
-      participantConnectionQuality.value.delete(participant.identity)
-      participantAudioLevels.value.delete(participant.identity)
-    })
+    attachRoomEventHandlers(newRoom)
 
     return newRoom
   }
 
-  // Update participant tracks
-  function updateParticipantTracks(
-    participantIdentity: string,
-    track: RemoteTrack | LocalAudioTrack | LocalVideoTrack,
-    source: string,
-    action: 'add' | 'remove'
-  ) {
-    const currentTracks = participantTracks.value.get(participantIdentity) || {}
-    // Always create a new object for Vue reactivity
-    const newTracks = { ...currentTracks }
+  function attachRoomEventHandlers(roomInstance: Room) {
+    roomInstance.on(RoomEvent.Connected, () => {
+      connectionState.value = ConnectionState.Connected
+      roomState.value = roomInstance.state
+      error.value = null
+      eventEmitter.emit('connected')
+    })
 
-    if (action === 'add') {
-      if (track.kind === Track.Kind.Video) {
-        if (source === 'camera') {
-          newTracks.camera = track as RemoteVideoTrack | LocalVideoTrack
-        } else if (source === 'screen_share') {
-          newTracks.screenShare = track as RemoteVideoTrack | LocalVideoTrack
+    roomInstance.on(RoomEvent.Disconnected, (reason) => {
+      connectionState.value = ConnectionState.Disconnected
+      roomState.value = roomInstance.state
+      clearParticipantState()
+      eventEmitter.emit('disconnected', reason)
+    })
+
+    roomInstance.on(RoomEvent.Reconnecting, () => {
+      connectionState.value = ConnectionState.Reconnecting
+      eventEmitter.emit('reconnecting')
+    })
+
+    roomInstance.on(RoomEvent.Reconnected, () => {
+      connectionState.value = ConnectionState.Connected
+      roomState.value = roomInstance.state
+      error.value = null
+      eventEmitter.emit('reconnected')
+    })
+
+    roomInstance.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
+      participantTracking.addParticipant(participant.identity)
+      eventEmitter.emit('participantConnected', participant)
+    })
+
+    roomInstance.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+      participantTracking.removeParticipant(participant.identity)
+      participantConnectionQuality.value.delete(participant.identity)
+      audioMonitoring.cleanupAnalyser(participant.identity)
+      eventEmitter.emit('participantDisconnected', participant)
+    })
+
+    roomInstance.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: TrackPublication, participant: RemoteParticipant) => {
+      participantTracking.updateTracks(participant.identity, track, publication.source, 'add')
+
+      if (publication.kind === Track.Kind.Video) {
+        participantTracking.addPublication(participant.identity, publication as RemoteTrackPublication, publication.source)
+      }
+
+      audioMonitoring.setupMonitoring(track, participant.identity)
+      eventEmitter.emit('trackSubscribed', track, publication, participant)
+    })
+
+    roomInstance.on(RoomEvent.TrackMuted, (publication: TrackPublication, participant: Participant) => {
+      if (publication.kind === Track.Kind.Video && publication.track && publication.source === Track.Source.Camera) {
+        participantTracking.updateTracks(participant.identity, publication.track as RemoteTrack | LocalVideoTrack, publication.source, 'remove')
+      } else if (publication.kind === Track.Kind.Audio && publication.track) {
+        participantTracking.updateTracks(participant.identity, publication.track as RemoteTrack | LocalAudioTrack, publication.source, 'add')
+      }
+      eventEmitter.emit('trackMuted', publication, participant)
+    })
+
+    roomInstance.on(RoomEvent.TrackUnmuted, (publication: TrackPublication, participant: Participant) => {
+      if (publication.kind === Track.Kind.Video && publication.track && publication.source === Track.Source.Camera) {
+        participantTracking.updateTracks(participant.identity, publication.track as RemoteTrack | LocalVideoTrack, publication.source, 'add')
+        if (participant === roomInstance.localParticipant) {
+          audioMonitoring.setupMonitoring(publication.track as LocalVideoTrack, participant.identity)
         }
-      } else if (track.kind === Track.Kind.Audio) {
-        if (source === 'microphone') {
-          newTracks.microphone = track as RemoteAudioTrack | LocalAudioTrack
-        } else if (source === 'screen_share_audio') {
-          newTracks.screenShareAudio = track as RemoteAudioTrack | LocalAudioTrack
+      } else if (publication.kind === Track.Kind.Audio && publication.track) {
+        participantTracking.updateTracks(participant.identity, publication.track as RemoteTrack | LocalAudioTrack, publication.source, 'add')
+      }
+      eventEmitter.emit('trackUnmuted', publication, participant)
+    })
+
+    roomInstance.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, publication: TrackPublication, participant: RemoteParticipant) => {
+      participantTracking.updateTracks(participant.identity, track, publication.source, 'remove')
+      if (track.kind === Track.Kind.Audio) {
+        audioMonitoring.cleanupAnalyser(participant.identity)
+      }
+      eventEmitter.emit('trackUnsubscribed', track, publication, participant)
+    })
+
+    roomInstance.on(RoomEvent.LocalTrackPublished, (publication: TrackPublication, participant: LocalParticipant) => {
+      if (publication.track) {
+        participantTracking.updateTracks(participant.identity, publication.track as LocalAudioTrack | LocalVideoTrack, publication.source, 'add')
+        audioMonitoring.setupMonitoring(publication.track as LocalAudioTrack | LocalVideoTrack, participant.identity)
+      }
+      updateLocalMediaState()
+      eventEmitter.emit('localTrackPublished', publication, participant)
+    })
+
+    roomInstance.on(RoomEvent.LocalTrackUnpublished, (publication: TrackPublication, participant: LocalParticipant) => {
+      if (publication.track) {
+        participantTracking.updateTracks(participant.identity, publication.track as LocalAudioTrack | LocalVideoTrack, publication.source, 'remove')
+        if (publication.track.kind === Track.Kind.Audio) {
+          audioMonitoring.cleanupAnalyser(participant.identity)
         }
       }
-    } else {
-      // Remove track
-      if (track.kind === Track.Kind.Video) {
-        if (source === 'camera') {
-          delete newTracks.camera
-        } else if (source === 'screen_share') {
-          delete newTracks.screenShare
-        }
-      } else if (track.kind === Track.Kind.Audio) {
-        if (source === 'microphone') {
-          delete newTracks.microphone
-        } else if (source === 'screen_share_audio') {
-          delete newTracks.screenShareAudio
-        }
-      }
-    }
+      updateLocalMediaState()
+      eventEmitter.emit('localTrackUnpublished', publication, participant)
+    })
 
-    participantTracks.value.set(participantIdentity, newTracks)
-  }
+    roomInstance.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
+      participantConnectionQuality.value.set(participant.identity, quality)
+      eventEmitter.emit('connectionQualityChanged', quality, participant)
+    })
 
-  // Setup audio level monitoring
-  function setupAudioLevelMonitoring(track: RemoteTrack | LocalAudioTrack | LocalVideoTrack, participantIdentity: string) {
-    if (track.kind === Track.Kind.Audio) {
-      const audioTrack = track as RemoteAudioTrack | LocalAudioTrack
-
-      // Audio level monitoring function (kept for future use)
-      // const updateAudioLevel = (level: number) => {
-      //   // Convert to percentage (0-100)
-      //   const levelPercentage = Math.round(level * 100)
-      //   participantAudioLevels.value.set(participantIdentity, levelPercentage)
-      //
-      //   // Update local audio level if it's the local participant
-      //   if (participantIdentity === room.value?.localParticipant.identity) {
-      //     audioLevel.value = levelPercentage
-      //   }
-      // }
-
-      // Audio level monitoring will be handled by ActiveSpeakersChanged event
-      // This provides speaking/not speaking status which is more reliable than raw audio levels
-
-      // Clean up listener when track is removed
-      audioTrack.on('ended', () => {
-        participantAudioLevels.value.delete(participantIdentity)
+    roomInstance.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+      // Reset all levels
+      const currentLevels = audioMonitoring.audioLevels.value
+      currentLevels.forEach((_, identity) => {
+        audioMonitoring.setLevel(identity, 0)
       })
-    }
+
+      speakers.forEach((speaker) => {
+        const level = Math.round((speaker.audioLevel ?? 0) * 100)
+        audioMonitoring.setLevel(speaker.identity, level)
+
+        if (speaker.identity === roomInstance.localParticipant.identity) {
+          audioLevel.value = level
+        }
+      })
+
+      if (speakers.length === 0 && roomInstance.localParticipant) {
+        audioLevel.value = 0
+      }
+    })
   }
 
   // Update local media state
@@ -484,28 +375,6 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     isCameraEnabled.value = participant.isCameraEnabled
     isMicrophoneEnabled.value = participant.isMicrophoneEnabled
     isScreenShareEnabled.value = participant.isScreenShareEnabled
-  }
-
-  // Event management
-  function emitEvent(event: string, ...args: unknown[]) {
-    const handlers = eventHandlers.get(event)
-    if (handlers) {
-      handlers.forEach(handler => handler(...args))
-    }
-  }
-
-  function on(event: string, handler: (...args: unknown[]) => void) {
-    if (!eventHandlers.has(event)) {
-      eventHandlers.set(event, new Set())
-    }
-    eventHandlers.get(event)!.add(handler)
-  }
-
-  function off(event: string, handler: (...args: unknown[]) => void) {
-    const handlers = eventHandlers.get(event)
-    if (handlers) {
-      handlers.delete(handler)
-    }
   }
 
   // Connection methods
@@ -533,18 +402,41 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       const serverUrl = options.serverUrl || config.public.livekitUrl
       await room.value.connect(serverUrl, tokenResponse.token)
 
-      // Initialize participant list with existing participants
-      remoteParticipantIdentities.value.clear()
+      // Initialize participant list with existing participants and their tracks
       room.value.remoteParticipants.forEach((participant) => {
-        remoteParticipantIdentities.value.add(participant.identity)
+        participantTracking.addParticipant(participant.identity)
+
+        // Add already-subscribed tracks for this participant
+        participant.trackPublications.forEach((publication) => {
+          if (publication.track && publication.isSubscribed) {
+            participantTracking.updateTracks(
+              participant.identity,
+              publication.track as RemoteTrack,
+              publication.source,
+              'add'
+            )
+
+            // Add video publications for quality control
+            if (publication.kind === Track.Kind.Video) {
+              participantTracking.addPublication(
+                participant.identity,
+                publication as RemoteTrackPublication,
+                publication.source
+              )
+            }
+          }
+        })
       })
 
       // Refresh devices after connection
-      await refreshDevices()
+      await deviceManagement.refreshDevices()
     } catch (err) {
       console.error('[LiveKit] Connection failed:', err)
       error.value = err as Error
       connectionState.value = ConnectionState.Disconnected
+      roomState.value = 'disconnected'
+      room.value = null
+      clearParticipantState()
       throw err
     }
   }
@@ -554,11 +446,8 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       await room.value.disconnect()
       room.value = null
     }
-    // Clear participant state
-    remoteParticipantIdentities.value.clear()
-    participantTracks.value.clear()
-    participantConnectionQuality.value.clear()
-    participantAudioLevels.value.clear()
+    clearParticipantState()
+    roomState.value = 'disconnected'
     connectionState.value = ConnectionState.Disconnected
   }
 
@@ -568,189 +457,136 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
   }
 
   // Media control methods
-  async function enableCamera(enabled = true): Promise<void> {
-    if (!room.value) throw new Error('Room not connected')
+  async function enableCamera(enabled = true, enableMicWithCamera = true): Promise<void> {
+    const currentRoom = getRoomOrThrow()
 
     if (enabled) {
       const options: VideoCaptureOptions = {
         resolution: VideoPresets.h720.resolution,
-        deviceId: selectedCamera.value || undefined
+        deviceId: deviceManagement.selectedCamera.value || undefined
       }
-      await room.value.localParticipant.setCameraEnabled(true, options)
+      await currentRoom.localParticipant.setCameraEnabled(true, options)
+
+      // Automatically enable microphone with camera for unified video call experience
+      if (enableMicWithCamera && !isMicrophoneEnabled.value) {
+        await enableMicrophone(true)
+      }
     } else {
-      await room.value.localParticipant.setCameraEnabled(false)
+      await currentRoom.localParticipant.setCameraEnabled(false)
     }
 
     updateLocalMediaState()
   }
 
   async function enableMicrophone(enabled = true): Promise<void> {
-    if (!room.value) throw new Error('Room not connected')
+    const currentRoom = getRoomOrThrow()
 
     if (enabled) {
       const options: AudioCaptureOptions = {
-        deviceId: selectedMicrophone.value || undefined,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
+        deviceId: deviceManagement.selectedMicrophone.value || undefined
       }
-      await room.value.localParticipant.setMicrophoneEnabled(true, options)
+      await currentRoom.localParticipant.setMicrophoneEnabled(true, options)
     } else {
-      await room.value.localParticipant.setMicrophoneEnabled(false)
+      await currentRoom.localParticipant.setMicrophoneEnabled(false)
     }
 
     updateLocalMediaState()
   }
 
   async function enableScreenShare(enabled = true): Promise<void> {
-    if (!room.value) throw new Error('Room not connected')
+    const currentRoom = getRoomOrThrow()
+    const localParticipant = currentRoom.localParticipant
 
-    try {
-      if (enabled) {
-        // Try multiple approaches to bypass 30fps browser limits
-        try {
-          // Approach 1: Use createScreenTracks with more explicit constraints
-          const tracks = await room.value.localParticipant.createScreenTracks({
-            audio: true,
-            resolution: {
-              width: 1920,
-              height: 1080,
-              frameRate: 60 // Explicit 60fps request
-            },
-            video: {
-              displaySurface: 'monitor' // Request full monitor capture for potentially higher fps
-            },
-            contentHint: 'motion',
-            // Try to bypass browser throttling
-            selfBrowserSurface: 'exclude'
-          })
+    if (enabled) {
+      // Try multiple approaches to bypass 30fps browser limits
+      try {
+        // Approach 1: Use createScreenTracks with more explicit constraints
+        const tracks = await localParticipant.createScreenTracks({
+          audio: true,
+          resolution: {
+            width: 1920,
+            height: 1080,
+            frameRate: 60 // Explicit 60fps request
+          },
+          video: {
+            displaySurface: 'monitor' // Request full monitor capture for potentially higher fps
+          },
+          contentHint: 'motion',
+          // Try to bypass browser throttling
+          selfBrowserSurface: 'exclude'
+        })
 
-          // Publish tracks with explicit high-performance encoding
-          await Promise.all(tracks.map((track) => {
-            if (track.kind === 'video') {
-              return room.value!.localParticipant.publishTrack(track, {
-                videoEncoding: {
-                  maxBitrate: 12_000_000,
-                  maxFramerate: 60,
-                  priority: 'high'
-                }
-              })
-            } else {
-              // Audio track - use default settings
-              return room.value!.localParticipant.publishTrack(track)
-            }
-          }))
-        } catch (error) {
-          console.warn('[LiveKit] Advanced screen capture failed, falling back to standard:', error)
-          // Fallback to original method
-          await room.value.localParticipant.setScreenShareEnabled(true, {
-            audio: true,
-            resolution: {
-              width: 1920,
-              height: 1080,
-              frameRate: 60
-            },
-            video: true,
-            contentHint: 'motion'
-          })
-        }
-      } else {
-        await room.value.localParticipant.setScreenShareEnabled(false)
+        // Publish tracks with explicit high-performance encoding
+        await Promise.all(tracks.map((track) => {
+          if (track.kind === 'video') {
+            return localParticipant.publishTrack(track, {
+              videoEncoding: {
+                maxBitrate: 12_000_000,
+                maxFramerate: 60,
+                priority: 'high'
+              }
+            })
+          } else {
+            // Audio track - use default settings
+            return localParticipant.publishTrack(track)
+          }
+        }))
+      } catch {
+        // Fallback to original method
+        await localParticipant.setScreenShareEnabled(true, {
+          audio: true,
+          resolution: {
+            width: 1920,
+            height: 1080,
+            frameRate: 60
+          },
+          video: true,
+          contentHint: 'motion'
+        })
       }
-
-      updateLocalMediaState()
-    } catch (error) {
-      console.error('[LiveKit] Failed to toggle screen share:', error)
-      throw error
+    } else {
+      await localParticipant.setScreenShareEnabled(false)
     }
+
+    updateLocalMediaState()
   }
 
-  // Device management
+  // Device management - delegate to deviceManagement composable
   async function refreshDevices(): Promise<void> {
-    try {
-      const devices = await Room.getLocalDevices()
-
-      cameras.value = devices.filter(d => d.kind === 'videoinput')
-      microphones.value = devices.filter(d => d.kind === 'audioinput')
-      speakers.value = devices.filter(d => d.kind === 'audiooutput')
-
-      // Set default devices if none selected
-      if (!selectedCamera.value && cameras.value.length > 0) {
-        selectedCamera.value = cameras.value[0]?.deviceId || null
-      }
-      if (!selectedMicrophone.value && microphones.value.length > 0) {
-        selectedMicrophone.value = microphones.value[0]?.deviceId || null
-      }
-      if (!selectedSpeaker.value && speakers.value.length > 0) {
-        selectedSpeaker.value = speakers.value[0]?.deviceId || null
-      }
-    } catch (err) {
-      console.error('[LiveKit] Failed to refresh devices:', err)
-    }
+    await deviceManagement.refreshDevices()
   }
 
   async function switchCamera(deviceId: string): Promise<void> {
-    selectedCamera.value = deviceId
-    if (room.value) {
-      try {
-        await room.value.switchActiveDevice('videoinput', deviceId)
-      } catch (error) {
-        console.error('[LiveKit] Failed to switch camera:', error)
-        throw error
-      }
-    }
+    await deviceManagement.switchCamera(room.value as Room | null, deviceId)
   }
 
   async function switchMicrophone(deviceId: string): Promise<void> {
-    selectedMicrophone.value = deviceId
-    if (room.value) {
-      try {
-        await room.value.switchActiveDevice('audioinput', deviceId)
-      } catch (error) {
-        console.error('[LiveKit] Failed to switch microphone:', error)
-        throw error
-      }
-    }
+    await deviceManagement.switchMicrophone(room.value as Room | null, deviceId, isMicrophoneEnabled.value)
   }
 
   async function switchSpeaker(deviceId: string): Promise<void> {
-    selectedSpeaker.value = deviceId
-    if (room.value) {
-      try {
-        await room.value.switchActiveDevice('audiooutput', deviceId)
-      } catch (error) {
-        console.error('[LiveKit] Failed to switch speaker:', error)
-        throw error
-      }
-    }
+    await deviceManagement.switchSpeaker(room.value as Room | null, deviceId)
   }
 
-  // Track getters
-  function getParticipantTracks(participantIdentity: string): LiveKitParticipant['tracks'] {
-    const tracks = participantTracks.value.get(participantIdentity) || {}
-    return tracks as LiveKitParticipant['tracks']
+  // Track getters - delegate to participantTracking composable
+  function getParticipantTracks(participantIdentity: string): ParticipantTracks {
+    return participantTracking.getTracks(participantIdentity)
   }
 
   function getVideoTrack(participantIdentity: string, source: 'camera' | 'screen_share' = 'camera'): RemoteVideoTrack | LocalVideoTrack | undefined {
-    const tracks = getParticipantTracks(participantIdentity)
-    return source === 'camera' ? tracks.camera : tracks.screenShare
+    return participantTracking.getVideoTrack(participantIdentity, source)
   }
 
   function getAudioTrack(participantIdentity: string): RemoteAudioTrack | LocalAudioTrack | undefined {
-    const tracks = getParticipantTracks(participantIdentity)
-    return tracks.microphone
+    return participantTracking.getAudioTrack(participantIdentity)
   }
 
   function getScreenShareAudioTrack(participantIdentity: string): RemoteAudioTrack | LocalAudioTrack | undefined {
-    const tracks = getParticipantTracks(participantIdentity)
-    return tracks.screenShareAudio
+    return participantTracking.getScreenShareAudioTrack(participantIdentity)
   }
 
   function getVideoPublication(participantIdentity: string, source: 'camera' | 'screen_share' = 'camera'): RemoteTrackPublication | undefined {
-    const pubMap = participantPublications.value.get(participantIdentity)
-    if (!pubMap) return undefined
-    const sourceKey = source === 'camera' ? Track.Source.Camera : Track.Source.ScreenShare
-    return pubMap.get(sourceKey) as RemoteTrackPublication | undefined
+    return participantTracking.getVideoPublication(participantIdentity, source)
   }
 
   function setVideoQuality(participantIdentity: string, quality: VideoQuality, source: 'camera' | 'screen_share' = 'camera'): void {
@@ -758,8 +594,8 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     if (publication && 'setVideoQuality' in publication) {
       try {
         publication.setVideoQuality(quality)
-      } catch (error) {
-        console.error('[LiveKitRoom] Failed to set video quality:', error)
+      } catch {
+        // Failed to set quality - ignore
       }
     }
   }
@@ -798,13 +634,13 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     audioLevel: readonly(audioLevel),
 
     // Device management
-    cameras,
-    microphones,
-    speakers,
-    selectedCamera,
-    selectedMicrophone,
-    selectedSpeaker,
-    supportsSpeakerSelection,
+    cameras: deviceManagement.cameras,
+    microphones: deviceManagement.microphones,
+    speakers: deviceManagement.speakers,
+    selectedCamera: deviceManagement.selectedCamera,
+    selectedMicrophone: deviceManagement.selectedMicrophone,
+    selectedSpeaker: deviceManagement.selectedSpeaker,
+    supportsSpeakerSelection: deviceManagement.supportsSpeakerSelection,
 
     // Methods
     connect,
@@ -831,7 +667,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     setVideoQuality,
 
     // Events
-    on,
-    off
+    on: eventEmitter.on,
+    off: eventEmitter.off
   }
 }
