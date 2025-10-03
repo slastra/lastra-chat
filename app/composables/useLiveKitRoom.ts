@@ -145,6 +145,67 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
   const participantPublications = ref<Map<string, Map<Track.Source, RemoteTrackPublication>>>(new Map())
   const participantConnectionQuality = ref<Map<string, ConnectionQuality>>(new Map())
   const participantAudioLevels = ref<Map<string, number>>(new Map())
+  // Keep analyser state per participant for real-time amplitude measurement
+  const participantAnalysers: Map<string, {
+    audioEl: HTMLMediaElement
+    ctx: AudioContext
+    src: MediaElementAudioSourceNode
+    analyser: AnalyserNode
+    raf?: number
+  }> = new Map()
+
+  function cleanupAnalyserState(identity: string) {
+    const state = participantAnalysers.get(identity)
+    if (state) {
+      if (state.raf) cancelAnimationFrame(state.raf)
+      try {
+        state.analyser.disconnect()
+      } catch (err) {
+        void err
+      }
+      try {
+        state.src.disconnect()
+      } catch (err) {
+        void err
+      }
+      try {
+        state.audioEl.pause()
+      } catch (err) {
+        void err
+      }
+      try {
+        if (state.audioEl.parentNode) state.audioEl.remove()
+      } catch (err) {
+        void err
+      }
+      try {
+        state.ctx.close()
+      } catch (err) {
+        void err
+      }
+      participantAnalysers.delete(identity)
+    }
+
+    participantAudioLevels.value.delete(identity)
+  }
+
+  function clearParticipantState() {
+    remoteParticipantIdentities.value.clear()
+    participantTracks.value.clear()
+    participantConnectionQuality.value.clear()
+    participantAudioLevels.value.clear()
+
+    Array.from(participantAnalysers.keys()).forEach(cleanupAnalyserState)
+    audioLevel.value = 0
+  }
+
+  function getRoomOrThrow(): Room {
+    const currentRoom = room.value
+    if (!currentRoom) {
+      throw new Error('Room not connected')
+    }
+    return currentRoom as Room
+  }
 
   // Reactive participant list to ensure UI updates
   const remoteParticipantIdentities = ref<Set<string>>(new Set())
@@ -253,52 +314,55 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       }
     })
 
-    // Room events
-    newRoom.on(RoomEvent.Connected, () => {
+    attachRoomEventHandlers(newRoom)
+
+    return newRoom
+  }
+
+  function attachRoomEventHandlers(roomInstance: Room) {
+    roomInstance.on(RoomEvent.Connected, () => {
       connectionState.value = ConnectionState.Connected
-      roomState.value = newRoom.state
+      roomState.value = roomInstance.state
       error.value = null
       emitEvent('connected')
     })
 
-    newRoom.on(RoomEvent.Disconnected, (reason) => {
+    roomInstance.on(RoomEvent.Disconnected, (reason) => {
       connectionState.value = ConnectionState.Disconnected
-      roomState.value = newRoom.state
+      roomState.value = roomInstance.state
+      clearParticipantState()
       emitEvent('disconnected', reason)
     })
 
-    newRoom.on(RoomEvent.Reconnecting, () => {
+    roomInstance.on(RoomEvent.Reconnecting, () => {
       connectionState.value = ConnectionState.Reconnecting
       emitEvent('reconnecting')
     })
 
-    newRoom.on(RoomEvent.Reconnected, () => {
+    roomInstance.on(RoomEvent.Reconnected, () => {
       connectionState.value = ConnectionState.Connected
-      roomState.value = newRoom.state
+      roomState.value = roomInstance.state
       error.value = null
       emitEvent('reconnected')
     })
 
-    // Participant events
-    newRoom.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
-      // Add to reactive participant list
+    roomInstance.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
       remoteParticipantIdentities.value.add(participant.identity)
       emitEvent('participantConnected', participant)
     })
 
-    newRoom.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
-      // Remove from reactive participant list
+    roomInstance.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
       remoteParticipantIdentities.value.delete(participant.identity)
-      // Clean up publications
       participantPublications.value.delete(participant.identity)
+      participantTracks.value.delete(participant.identity)
+      participantConnectionQuality.value.delete(participant.identity)
+      cleanupAnalyserState(participant.identity)
       emitEvent('participantDisconnected', participant)
     })
 
-    // Track events
-    newRoom.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: TrackPublication, participant: RemoteParticipant) => {
+    roomInstance.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: TrackPublication, participant: RemoteParticipant) => {
       updateParticipantTracks(participant.identity, track, publication.source, 'add')
 
-      // Store the publication for quality control
       if (publication.kind === Track.Kind.Video) {
         if (!participantPublications.value.has(participant.identity)) {
           participantPublications.value.set(participant.identity, new Map())
@@ -311,42 +375,38 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       emitEvent('trackSubscribed', track, publication, participant)
     })
 
-    // Track mute events - handle camera enable/disable without unpublish
-    newRoom.on(RoomEvent.TrackMuted, (publication: TrackPublication, participant: Participant) => {
-      // Handle camera tracks - remove from map when muted
+    roomInstance.on(RoomEvent.TrackMuted, (publication: TrackPublication, participant: Participant) => {
       if (publication.kind === Track.Kind.Video && publication.track && publication.source === Track.Source.Camera) {
         updateParticipantTracks(participant.identity, publication.track as RemoteTrack | LocalVideoTrack, publication.source, 'remove')
       } else if (publication.kind === Track.Kind.Audio && publication.track) {
-        // Handle audio tracks - trigger reactive update without removing track
-        // Force a reactive update by recreating the tracks object
         const tracks = participantTracks.value.get(participant.identity) || {}
         participantTracks.value.set(participant.identity, { ...tracks })
       }
       emitEvent('trackMuted', publication, participant)
     })
 
-    newRoom.on(RoomEvent.TrackUnmuted, (publication: TrackPublication, participant: Participant) => {
-      // Handle camera tracks - add back to map when unmuted
+    roomInstance.on(RoomEvent.TrackUnmuted, (publication: TrackPublication, participant: Participant) => {
       if (publication.kind === Track.Kind.Video && publication.track && publication.source === Track.Source.Camera) {
         updateParticipantTracks(participant.identity, publication.track as RemoteTrack | LocalVideoTrack, publication.source, 'add')
-        if (participant === newRoom.localParticipant) {
+        if (participant === roomInstance.localParticipant) {
           setupAudioLevelMonitoring(publication.track as LocalVideoTrack, participant.identity)
         }
       } else if (publication.kind === Track.Kind.Audio && publication.track) {
-        // Handle audio tracks - trigger reactive update without modifying track
-        // Force a reactive update by recreating the tracks object
         const tracks = participantTracks.value.get(participant.identity) || {}
         participantTracks.value.set(participant.identity, { ...tracks })
       }
       emitEvent('trackUnmuted', publication, participant)
     })
 
-    newRoom.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, publication: TrackPublication, participant: RemoteParticipant) => {
+    roomInstance.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, publication: TrackPublication, participant: RemoteParticipant) => {
       updateParticipantTracks(participant.identity, track, publication.source, 'remove')
+      if (track.kind === Track.Kind.Audio) {
+        cleanupAnalyserState(participant.identity)
+      }
       emitEvent('trackUnsubscribed', track, publication, participant)
     })
 
-    newRoom.on(RoomEvent.LocalTrackPublished, (publication: TrackPublication, participant: LocalParticipant) => {
+    roomInstance.on(RoomEvent.LocalTrackPublished, (publication: TrackPublication, participant: LocalParticipant) => {
       if (publication.track) {
         updateParticipantTracks(participant.identity, publication.track as LocalAudioTrack | LocalVideoTrack, publication.source, 'add')
         setupAudioLevelMonitoring(publication.track as LocalAudioTrack | LocalVideoTrack, participant.identity)
@@ -355,53 +415,40 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       emitEvent('localTrackPublished', publication, participant)
     })
 
-    newRoom.on(RoomEvent.LocalTrackUnpublished, (publication: TrackPublication, participant: LocalParticipant) => {
+    roomInstance.on(RoomEvent.LocalTrackUnpublished, (publication: TrackPublication, participant: LocalParticipant) => {
       if (publication.track) {
         updateParticipantTracks(participant.identity, publication.track as LocalAudioTrack | LocalVideoTrack, publication.source, 'remove')
+        if (publication.track.kind === Track.Kind.Audio) {
+          cleanupAnalyserState(participant.identity)
+        }
       }
       updateLocalMediaState()
       emitEvent('localTrackUnpublished', publication, participant)
     })
 
-    // Connection quality monitoring
-    newRoom.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
-      const identity = participant.identity
-      participantConnectionQuality.value.set(identity, quality)
+    roomInstance.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
+      participantConnectionQuality.value.set(participant.identity, quality)
       emitEvent('connectionQualityChanged', quality, participant)
     })
 
-    // Audio level monitoring via active speakers
-    newRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
-      // Reset all audio levels to 0
+    roomInstance.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
       participantAudioLevels.value.forEach((_, identity) => {
         participantAudioLevels.value.set(identity, 0)
       })
 
-      // Set speaking participants to a higher level
       speakers.forEach((speaker) => {
-        participantAudioLevels.value.set(speaker.identity, 75) // 75% indicates speaking
+        const level = Math.round((speaker.audioLevel ?? 0) * 100)
+        participantAudioLevels.value.set(speaker.identity, level)
 
-        // Update local audio level if it's the local participant
-        if (speaker.identity === newRoom.localParticipant.identity) {
-          audioLevel.value = 75
+        if (speaker.identity === roomInstance.localParticipant.identity) {
+          audioLevel.value = level
         }
       })
 
-      // If no speakers, ensure local participant shows 0
-      if (speakers.length === 0 && newRoom.localParticipant) {
+      if (speakers.length === 0 && roomInstance.localParticipant) {
         audioLevel.value = 0
       }
     })
-
-    // Participant disconnection cleanup
-    newRoom.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
-      // Clean up participant data
-      participantTracks.value.delete(participant.identity)
-      participantConnectionQuality.value.delete(participant.identity)
-      participantAudioLevels.value.delete(participant.identity)
-    })
-
-    return newRoom
   }
 
   // Update participant tracks
@@ -454,25 +501,112 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
     if (track.kind === Track.Kind.Audio) {
       const audioTrack = track as RemoteAudioTrack | LocalAudioTrack
 
-      // Audio level monitoring function (kept for future use)
-      // const updateAudioLevel = (level: number) => {
-      //   // Convert to percentage (0-100)
-      //   const levelPercentage = Math.round(level * 100)
-      //   participantAudioLevels.value.set(participantIdentity, levelPercentage)
-      //
-      //   // Update local audio level if it's the local participant
-      //   if (participantIdentity === room.value?.localParticipant.identity) {
-      //     audioLevel.value = levelPercentage
-      //   }
-      // }
+      // Ensure prior analysers are cleaned before creating a new one
+      cleanupAnalyserState(participantIdentity)
 
-      // Audio level monitoring will be handled by ActiveSpeakersChanged event
-      // This provides speaking/not speaking status which is more reliable than raw audio levels
+      // Try to attach the track to a hidden audio element and measure amplitude via WebAudio
+      try {
+        // Prefer using the raw MediaStreamTrack (if available) as source for analyser
+        const maybeMediaStreamTrack = (audioTrack as unknown as { mediaStreamTrack?: MediaStreamTrack }).mediaStreamTrack
+        // Look up AudioContext constructor (handle vendor prefixes)
+        /* eslint-disable @typescript-eslint/no-explicit-any */
+        const AudioCtxCtor = (window as any).AudioContext || (window as any).webkitAudioContext
+        /* eslint-enable @typescript-eslint/no-explicit-any */
+        if (!AudioCtxCtor) {
+          console.debug('[LiveKit][analyser] no AudioContext available in this environment')
+          // bail out - rely on ActiveSpeakersChanged fallback
+          participantAudioLevels.value.set(participantIdentity, 0)
+          return
+        }
+        const ctx = new AudioCtxCtor()
+        let src: MediaElementAudioSourceNode | MediaStreamAudioSourceNode
+        let analyser: AnalyserNode
+        let audioEl: HTMLMediaElement | undefined
 
-      // Clean up listener when track is removed
-      audioTrack.on('ended', () => {
-        participantAudioLevels.value.delete(participantIdentity)
-      })
+        if (maybeMediaStreamTrack) {
+          // Use MediaStreamTrack -> MediaStream -> MediaStreamAudioSourceNode
+          const ms = new MediaStream([maybeMediaStreamTrack])
+          src = ctx.createMediaStreamSource(ms)
+          analyser = ctx.createAnalyser()
+          analyser.fftSize = 512
+          src.connect(analyser)
+          console.debug('[LiveKit][analyser] using MediaStreamTrack for', participantIdentity)
+        } else {
+          // Fallback: attach to an audio element
+          const attachFn = (audioTrack as unknown as { attach?: () => HTMLMediaElement }).attach
+          audioEl = attachFn ? attachFn.call(audioTrack) : document.createElement('audio')
+          audioEl.muted = true
+          audioEl.volume = 0
+          audioEl.style.position = 'absolute'
+          audioEl.style.left = '-9999px'
+          audioEl.style.width = '1px'
+          audioEl.style.height = '1px'
+          audioEl.autoplay = true
+          if (!document.body.contains(audioEl)) {
+            document.body.appendChild(audioEl)
+          }
+          try {
+            const p = audioEl.play()
+            if (p && typeof (p as Promise<void>).catch === 'function') {
+              (p as Promise<void>).catch((e) => {
+                console.debug('[LiveKit][analyser] audioEl.play() rejected', e)
+              })
+            }
+          } catch (err) {
+            console.debug('[LiveKit][analyser] audioEl.play() failed', err)
+          }
+
+          src = ctx.createMediaElementSource(audioEl)
+          analyser = ctx.createAnalyser()
+          analyser.fftSize = 512
+          src.connect(analyser)
+          console.debug('[LiveKit][analyser] using attached element for', participantIdentity)
+        }
+
+        const buffer = new Uint8Array(analyser.fftSize)
+
+        const tick = () => {
+          analyser.getByteTimeDomainData(buffer)
+          // compute RMS from time domain (0..255 center at 128)
+          let sum = 0
+          if (buffer && buffer.length) {
+            for (let i = 0; i < buffer.length; i++) {
+              const val = buffer[i] ?? 128
+              const v = (val - 128) / 128
+              sum += v * v
+            }
+          }
+          const rms = Math.sqrt(sum / buffer.length) // 0..1
+          const level = Math.round(Math.min(1, rms) * 100)
+          participantAudioLevels.value.set(participantIdentity, level)
+
+          // Update local audio level if it's the local participant
+          if (participantIdentity === room.value?.localParticipant.identity) {
+            audioLevel.value = level
+          }
+          const raf = requestAnimationFrame(tick)
+          const state = participantAnalysers.get(participantIdentity)
+          if (state) state.raf = raf
+        }
+
+        participantAnalysers.set(participantIdentity, { audioEl: audioEl as HTMLMediaElement, ctx, src: src as MediaElementAudioSourceNode, analyser, raf: undefined })
+        // start measuring
+        console.debug('[LiveKit][analyser] started for', participantIdentity)
+        tick()
+
+        // Clean up when track ends
+        audioTrack.on('ended', () => {
+          cleanupAnalyserState(participantIdentity)
+        })
+      } catch (err) {
+        // Fallback: leave levels to ActiveSpeakersChanged if analyser fails
+        // ensure there's an entry and cleanup on end
+        console.debug('[LiveKit][analyser] setup failed', err)
+        participantAudioLevels.value.set(participantIdentity, 0)
+        audioTrack.on('ended', () => {
+          cleanupAnalyserState(participantIdentity)
+        })
+      }
     }
   }
 
@@ -545,6 +679,9 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       console.error('[LiveKit] Connection failed:', err)
       error.value = err as Error
       connectionState.value = ConnectionState.Disconnected
+      roomState.value = 'disconnected'
+      room.value = null
+      clearParticipantState()
       throw err
     }
   }
@@ -554,11 +691,8 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
       await room.value.disconnect()
       room.value = null
     }
-    // Clear participant state
-    remoteParticipantIdentities.value.clear()
-    participantTracks.value.clear()
-    participantConnectionQuality.value.clear()
-    participantAudioLevels.value.clear()
+    clearParticipantState()
+    roomState.value = 'disconnected'
     connectionState.value = ConnectionState.Disconnected
   }
 
@@ -568,24 +702,29 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
   }
 
   // Media control methods
-  async function enableCamera(enabled = true): Promise<void> {
-    if (!room.value) throw new Error('Room not connected')
+  async function enableCamera(enabled = true, enableMicWithCamera = true): Promise<void> {
+    const currentRoom = getRoomOrThrow()
 
     if (enabled) {
       const options: VideoCaptureOptions = {
         resolution: VideoPresets.h720.resolution,
         deviceId: selectedCamera.value || undefined
       }
-      await room.value.localParticipant.setCameraEnabled(true, options)
+      await currentRoom.localParticipant.setCameraEnabled(true, options)
+
+      // Automatically enable microphone with camera for unified video call experience
+      if (enableMicWithCamera && !isMicrophoneEnabled.value) {
+        await enableMicrophone(true)
+      }
     } else {
-      await room.value.localParticipant.setCameraEnabled(false)
+      await currentRoom.localParticipant.setCameraEnabled(false)
     }
 
     updateLocalMediaState()
   }
 
   async function enableMicrophone(enabled = true): Promise<void> {
-    if (!room.value) throw new Error('Room not connected')
+    const currentRoom = getRoomOrThrow()
 
     if (enabled) {
       const options: AudioCaptureOptions = {
@@ -594,23 +733,25 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
         noiseSuppression: true,
         autoGainControl: true
       }
-      await room.value.localParticipant.setMicrophoneEnabled(true, options)
+      await currentRoom.localParticipant.setMicrophoneEnabled(true, options)
     } else {
-      await room.value.localParticipant.setMicrophoneEnabled(false)
+      await currentRoom.localParticipant.setMicrophoneEnabled(false)
     }
 
     updateLocalMediaState()
   }
 
   async function enableScreenShare(enabled = true): Promise<void> {
-    if (!room.value) throw new Error('Room not connected')
+    const currentRoom = getRoomOrThrow()
 
     try {
+      const localParticipant = currentRoom.localParticipant
+
       if (enabled) {
         // Try multiple approaches to bypass 30fps browser limits
         try {
           // Approach 1: Use createScreenTracks with more explicit constraints
-          const tracks = await room.value.localParticipant.createScreenTracks({
+          const tracks = await localParticipant.createScreenTracks({
             audio: true,
             resolution: {
               width: 1920,
@@ -628,7 +769,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
           // Publish tracks with explicit high-performance encoding
           await Promise.all(tracks.map((track) => {
             if (track.kind === 'video') {
-              return room.value!.localParticipant.publishTrack(track, {
+              return localParticipant.publishTrack(track, {
                 videoEncoding: {
                   maxBitrate: 12_000_000,
                   maxFramerate: 60,
@@ -637,13 +778,13 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
               })
             } else {
               // Audio track - use default settings
-              return room.value!.localParticipant.publishTrack(track)
+              return localParticipant.publishTrack(track)
             }
           }))
         } catch (error) {
           console.warn('[LiveKit] Advanced screen capture failed, falling back to standard:', error)
           // Fallback to original method
-          await room.value.localParticipant.setScreenShareEnabled(true, {
+          await localParticipant.setScreenShareEnabled(true, {
             audio: true,
             resolution: {
               width: 1920,
@@ -655,7 +796,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
           })
         }
       } else {
-        await room.value.localParticipant.setScreenShareEnabled(false)
+        await localParticipant.setScreenShareEnabled(false)
       }
 
       updateLocalMediaState()
@@ -703,7 +844,9 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
 
   async function switchMicrophone(deviceId: string): Promise<void> {
     selectedMicrophone.value = deviceId
-    if (room.value) {
+    // Only switch active device if microphone is currently enabled
+    // If disabled, the new device will be used next time it's enabled
+    if (room.value && isMicrophoneEnabled.value) {
       try {
         await room.value.switchActiveDevice('audioinput', deviceId)
       } catch (error) {

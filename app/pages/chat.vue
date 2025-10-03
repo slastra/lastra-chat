@@ -7,6 +7,9 @@ const { loadBots } = useBots()
 const { clientId, userName } = useUser()
 
 const isReady = ref(false)
+const isDeviceSettingsOpen = ref(false)
+const isSidebarCollapsed = ref(false)
+const toast = useToast()
 
 // Initialize LiveKit room
 const liveKitRoom = useLiveKitRoom({
@@ -64,6 +67,35 @@ const humanUserCount = computed(() => {
 provide('liveKitRoom', liveKitRoom)
 provide('liveKitChat', liveKitChat)
 provide('liveKitBots', liveKitBots)
+
+// Watch for new messages and show toast when sidebar is collapsed
+watch(() => liveKitChat.messages.value, (newMessages, oldMessages) => {
+  if (!oldMessages || !isSidebarCollapsed.value) return
+
+  // Get the newest message
+  const newestMessage = newMessages[newMessages.length - 1]
+  if (!newestMessage || newMessages.length <= oldMessages.length) return
+
+  // Don't show toast for own messages
+  if (newestMessage.userId === clientId.value) return
+
+  // Show toast based on message type
+  if (newestMessage.type === 'message') {
+    toast.add({
+      title: newestMessage.userName,
+      description: newestMessage.content,
+      icon: 'i-lucide-message-circle',
+      color: 'primary'
+    })
+  } else if (newestMessage.type === 'system') {
+    toast.add({
+      title: 'System',
+      description: newestMessage.content,
+      icon: 'i-lucide-info',
+      color: 'neutral'
+    })
+  }
+}, { deep: true })
 
 onMounted(async () => {
   // Middleware handles auth, safe to proceed
@@ -153,94 +185,122 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
   <div>
     <UDashboardGroup v-if="isReady">
       <UDashboardSidebar
+        v-model:collapsed="isSidebarCollapsed"
         resizable
-        :min-size="22"
-        :default-size="22"
-        :max-size="40"
+        :min-size="25"
+        :default-size="30"
+        :max-size="50"
         mode="modal"
+        :ui="{ body: 'pb-0' }"
         class="bg-elevated/50"
       >
         <template #header>
-          <div class="flex items-center justify-between w-full  gap-2">
-            <h3 class="font-semibold ">
-              Online Users
-            </h3>
-            <UBadge
-              :label="String(humanUserCount)"
-              color="success"
-              variant="subtle"
-            />
-          </div>
-        </template>
+          <div class="flex items-center justify-between w-full gap-2">
+            <div class="flex items-center gap-2">
+              <h3 class="font-semibold">
+                Chat
+              </h3>
+              <UBadge
+                :label="String(humanUserCount)"
+                color="success"
+                variant="subtle"
+              />
+            </div>
+            <div class="flex items-center gap-3">
+              <!-- Sound Settings Popover -->
+              <UPopover>
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  icon="i-lucide-volume-2"
+                />
 
-        <div class="flex-1 min-h-0 w-full">
-          <ChatUserList />
-        </div>
+                <template #content>
+                  <div class="p-4 w-96">
+                    <SoundSettings />
+                  </div>
+                </template>
+              </UPopover>
 
-        <template #footer>
-          <div class="w-full py-4">
-            <StreamingMenu
-              :webcam-enabled="liveKitRoom.isCameraEnabled.value"
-              :mic-enabled="liveKitRoom.isMicrophoneEnabled.value"
-              :screen-enabled="liveKitRoom.isScreenShareEnabled.value"
-              :supports-speaker-selection="liveKitRoom.supportsSpeakerSelection.value"
-              :selected-camera="liveKitRoom.selectedCamera.value ?? undefined"
-              :selected-microphone="liveKitRoom.selectedMicrophone.value ?? undefined"
-              :selected-speaker="liveKitRoom.selectedSpeaker.value ?? undefined"
-              @webcam-toggle="handleWebcamToggle"
-              @mic-toggle="handleMicToggle"
-              @screen-toggle="handleScreenToggle"
-              @device-change="handleDeviceChange"
-            />
-            <!-- Audio Level Display -->
-            <div
-              v-if="liveKitRoom.isMicrophoneEnabled.value"
-              class="mt-3 space-y-1"
-            >
-              <div class="flex items-center justify-between text-xs text-muted">
-                <span>Audio Level</span>
-                <span>{{ liveKitRoom.audioLevel.value }}%</span>
-              </div>
-              <UProgress
-                :model-value="liveKitRoom.audioLevel.value"
-                :max="100"
-                size="sm"
-                :color="liveKitRoom.audioLevel.value > 80 ? 'error' : liveKitRoom.audioLevel.value > 50 ? 'warning' : 'primary'"
+              <!-- User List Popover -->
+              <UPopover>
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  icon="i-lucide-users"
+                />
+
+                <template #content>
+                  <div class="p-4 w-80  overflow-y-auto">
+                    <ChatUserList />
+                  </div>
+                </template>
+              </UPopover>
+
+              <UButton
+                color="neutral"
+                variant="ghost"
+                icon="i-lucide-log-out"
+
+                @click="async () => { await liveKitRoom.disconnect(); navigateTo('/') }"
               />
             </div>
           </div>
         </template>
+
+        <div class="flex-1 min-h-0 w-full flex flex-col">
+          <div class="flex-1 overflow-hidden">
+            <ChatMessageList />
+          </div>
+          <div class="px-2 pt-2">
+            <ChatInput />
+          </div>
+        </div>
       </UDashboardSidebar>
 
-      <UDashboardPanel id="chat" class="relative" :ui="{ body: 'p-0 sm:p-0' }">
+      <UDashboardPanel id="video-grid" class="relative" :ui="{ body: 'p-0 sm:p-0' }">
         <template #header>
-          <UDashboardNavbar title="Lastra Chat">
+          <UDashboardNavbar>
+            <template #left>
+              <UChip
+                :show="liveKitRoom.isConnected.value"
+                :color="liveKitRoom.isConnected.value ? 'success' : 'error'"
+                size="2xs"
+                inset
+              >
+                <div class="text-lg font-semibold">
+                  Lastra Chat
+                </div>
+              </UChip>
+            </template>
             <template #right>
               <div class="flex items-center gap-3">
-                <UBadge :color="liveKitRoom.isConnected.value ? 'success' : liveKitRoom.isConnecting.value ? 'warning' : 'error'" variant="subtle">
-                  {{ liveKitRoom.isConnected.value ? 'connected' : liveKitRoom.isConnecting.value ? 'connecting' : 'disconnected' }}
-                </UBadge>
+                <!-- Streaming Controls -->
+                <UButton
+                  :color="liveKitRoom.isMicrophoneEnabled.value ? 'primary' : 'neutral'"
+                  variant="ghost"
+                  icon="i-lucide-mic"
+                  @click="handleMicToggle"
+                />
+                <UButton
+                  :color="liveKitRoom.isCameraEnabled.value ? 'primary' : 'neutral'"
+                  variant="ghost"
+                  icon="i-lucide-video"
+                  @click="handleWebcamToggle"
+                />
+                <UButton
+                  :color="liveKitRoom.isScreenShareEnabled.value ? 'primary' : 'neutral'"
+                  variant="ghost"
+                  icon="i-lucide-screen-share"
+                  @click="handleScreenToggle"
+                />
 
-                <!-- Sound Settings Popover -->
-                <UPopover>
-                  <UButton
-                    color="neutral"
-                    variant="ghost"
-                    icon="i-lucide-volume-2"
-                  />
-
-                  <template #content>
-                    <div class="p-4 w-96">
-                      <SoundSettings />
-                    </div>
-                  </template>
-                </UPopover>
-
+                <!-- Device Settings Button -->
                 <UButton
                   color="neutral"
                   variant="ghost"
-                  icon="i-lucide-log-out"
-                  @click="async () => { await liveKitRoom.disconnect(); navigateTo('/') }"
+                  icon="i-lucide-settings"
+                  @click="isDeviceSettingsOpen = true"
                 />
               </div>
             </template>
@@ -248,20 +308,27 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
         </template>
 
         <template #body>
-          <div class="h-full flex flex-col">
-            <ChatMessageList />
-            <div class="px-4">
-              <ChatInput />
-            </div>
-          </div>
+          <VideoGridPanel />
         </template>
       </UDashboardPanel>
 
       <!-- Audio Enable Prompt -->
     </UDashboardGroup>
 
-    <!-- Screen Share Audio Rendering (hidden, for audio playback only) -->
+    <!-- Audio Rendering (hidden, for audio playback only) -->
     <div v-if="isReady" class="hidden">
+      <!-- Render microphone audio for all participants (exclude local to prevent feedback) -->
+      <div v-for="participant in allParticipants" :key="`mic-audio-${participant.identity}`">
+        <VideoTrack
+          v-if="participant.isMicrophoneEnabled && participant.identity !== liveKitRoom.localParticipant.value?.identity"
+          :track="liveKitRoom.getAudioTrack(participant.identity)"
+          :participant-identity="participant.identity"
+          :is-local="false"
+          :muted="false"
+          :autoplay="true"
+        />
+      </div>
+
       <!-- Render screen share audio for remote participants only (exclude local to prevent feedback) -->
       <div v-for="participant in allParticipants" :key="`screen-audio-${participant.identity}`">
         <VideoTrack
@@ -280,5 +347,18 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
         <p>Just a moment...</p>
       </UCard>
     </div>
+
+    <!-- Device Settings Modal -->
+    <UModal v-model:open="isDeviceSettingsOpen" title="Device Settings">
+      <template #body>
+        <DeviceSettings
+          :supports-speaker-selection="liveKitRoom.supportsSpeakerSelection.value"
+          :selected-camera="liveKitRoom.selectedCamera.value ?? undefined"
+          :selected-microphone="liveKitRoom.selectedMicrophone.value ?? undefined"
+          :selected-speaker="liveKitRoom.selectedSpeaker.value ?? undefined"
+          @device-change="handleDeviceChange"
+        />
+      </template>
+    </UModal>
   </div>
 </template>

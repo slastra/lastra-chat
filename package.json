@@ -23,6 +23,7 @@
     "@nuxt/ui": "4.0.0",
     "@nuxtjs/mdc": "^0.17.4",
     "@vueuse/nuxt": "13.9.0",
+    "gridstack": "^12.3.3",
     "livekit-client": "^2.15.7",
     "livekit-server-sdk": "^2.13.3",
     "nuxt": "^4.1.2",
