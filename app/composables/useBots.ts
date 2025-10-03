@@ -17,10 +17,10 @@ export const useBots = () => {
     try {
       const { data } = await $fetch<{ data: BotConfig[] }>('/api/bots')
       bots.value = data || []
-      // Initialize all bots as enabled by default
+      // Initialize all bots as disabled by default
       data?.forEach((bot) => {
         if (botsEnabled.value[bot.name] === undefined) {
-          botsEnabled.value[bot.name] = true
+          botsEnabled.value[bot.name] = false
         }
       })
     } catch (error) {
@@ -58,7 +58,7 @@ export const useBots = () => {
 
   // Check if a bot is enabled
   const isBotEnabled = (botName: string) => {
-    return botsEnabled.value[botName] ?? true
+    return botsEnabled.value[botName] ?? false
   }
 
   // Check if message mentions any enabled bot
