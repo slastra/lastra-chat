@@ -16,6 +16,9 @@ const emit = defineEmits<{
   ]
 }>()
 
+// Device preferences management
+const devicePrefs = useDevicePreferences()
+
 // Device management
 const {
   videoInputs: cameras,
@@ -28,17 +31,32 @@ const {
 // Selected devices - computed from props (always use LiveKit's selected device)
 const internalSelectedCamera = computed({
   get: () => props.selectedCamera || '',
-  set: (val) => { if (val) emit('deviceChange', 'videoInput', val) }
+  set: (val) => {
+    if (val) {
+      emit('deviceChange', 'videoInput', val)
+      devicePrefs.camera.value = val // Save preference
+    }
+  }
 })
 
 const internalSelectedMicrophone = computed({
   get: () => props.selectedMicrophone || '',
-  set: (val) => { if (val) emit('deviceChange', 'audioInput', val) }
+  set: (val) => {
+    if (val) {
+      emit('deviceChange', 'audioInput', val)
+      devicePrefs.microphone.value = val // Save preference
+    }
+  }
 })
 
 const internalSelectedSpeaker = computed({
   get: () => props.selectedSpeaker || '',
-  set: (val) => { if (val) emit('deviceChange', 'audioOutput', val) }
+  set: (val) => {
+    if (val) {
+      emit('deviceChange', 'audioOutput', val)
+      devicePrefs.speaker.value = val // Save preference
+    }
+  }
 })
 
 // WHIP Ingress management
@@ -48,8 +66,24 @@ const ingressError = ref<string | null>(null)
 const showOBSInstructions = ref(false)
 const toast = useToast()
 
-// Load or create WHIP ingress on mount
+// Apply stored device preferences on mount
 onMounted(async () => {
+  // Apply device preferences if they exist and devices are available
+  await nextTick()
+
+  if (devicePrefs.camera.value && cameras.value.some(c => c.deviceId === devicePrefs.camera.value)) {
+    emit('deviceChange', 'videoInput', devicePrefs.camera.value)
+  }
+
+  if (devicePrefs.microphone.value && microphones.value.some(m => m.deviceId === devicePrefs.microphone.value)) {
+    emit('deviceChange', 'audioInput', devicePrefs.microphone.value)
+  }
+
+  if (devicePrefs.speaker.value && speakers.value.some(s => s.deviceId === devicePrefs.speaker.value) && props.supportsSpeakerSelection) {
+    emit('deviceChange', 'audioOutput', devicePrefs.speaker.value)
+  }
+
+  // Load WHIP ingress
   isLoadingIngress.value = true
   ingressError.value = null
 
@@ -223,12 +257,6 @@ const copyToClipboard = async (text: string, label: string) => {
               <li>Paste the <strong>Stream Key</strong> into the "Bearer Token" field</li>
               <li>Click <strong>OK</strong> and start streaming</li>
             </ol>
-            <p class="text-xs text-muted mt-3">
-              <strong>Note:</strong> WHIP requires OBS Studio 30 or newer.
-            </p>
-            <p class="text-xs text-muted mt-3">
-              Your OBS stream will appear in the video grid for all participants.
-            </p>
           </div>
         </UCard>
       </div>

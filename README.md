@@ -35,6 +35,9 @@ Real-time chat application built with Nuxt 4 and LiveKit, featuring WebRTC-based
 - **Video Quality Stats**: Real-time statistics overlay showing resolution, framerate, and bitrate
 - **Scroll to Bottom**: Auto-appearing button when scrolling up, smart auto-scroll behavior
 - **Modern Typography**: Inter font family for clean, legible UI text; Geist Mono for code
+- **Persistent Identity**: Cookie-based reconnection within 30-second timeout, auto-filled username
+- **Device Preferences**: Remember camera, microphone, and speaker selections across sessions
+- **Sound Preferences**: Customizable notification sounds with persistent volume and event mapping
 
 ## Technology Stack
 
@@ -228,7 +231,9 @@ The application uses DiceBear to generate unique identicon-style avatars:
 - **useLiveKitBots**: AI bot integration with LiveKit data channels
 - **useDiceBearAvatar**: Avatar generation using DiceBear identicon style
 - **useSoundManager**: Audio notification system with localStorage preferences
-- **useUser**: User state management with persistent storage
+- **useUser**: User state management with persistent identity (cookie-based clientId + localStorage username)
+- **useSoundSettings**: Sound notification preferences with volume control and event mapping
+- **useDevicePreferences**: Camera, microphone, and speaker preferences persistence
 
 ### Type Organization
 - `/shared/types/` - Types shared between client and server
@@ -241,6 +246,9 @@ The application uses DiceBear to generate unique identicon-style avatars:
 ### Recent Updates
 
 **October 2025:**
+- **User Preferences**: Cookie-based persistent identity, remembered device selections, sound preferences
+- **Reconnection**: Seamless reconnection within 30-second timeout using persistent clientId
+- **Enhanced UX**: Auto-filled username with "Welcome back" message, privacy controls
 - **WHIP Ingress**: OBS streaming support via WHIP protocol with bypass mode
 - **Typography**: Switched to Inter + Geist Mono for modern, clean UI
 - **Chat UX**: Scroll-to-bottom button, fixed avatar squishing, improved layout

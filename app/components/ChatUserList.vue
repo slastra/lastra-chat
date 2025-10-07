@@ -50,7 +50,6 @@ const sortedUsers = computed(() => {
       <div
         v-for="user in sortedUsers"
         :key="user.userId"
-        class="border rounded-lg border-accented bg-default/50 p-2"
       >
         <div class="flex items-center justify-between">
           <UUser
