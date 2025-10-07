@@ -191,7 +191,7 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
         :default-size="30"
         :max-size="50"
         mode="modal"
-        :ui="{ body: 'pb-0 overflow-hidden' }"
+        :ui="{ body: 'flex flex-col', footer: '' }"
         class="bg-elevated/50"
       >
         <template #header>
@@ -248,14 +248,11 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
           </div>
         </template>
 
-        <div class="flex-1 min-h-0 w-full flex flex-col">
-          <div class="flex-1 min-h-0">
-            <ChatMessageList />
-          </div>
-          <div class="shrink-0 px-2 pt-2">
-            <ChatInput />
-          </div>
-        </div>
+        <ChatMessageList />
+
+        <template #footer>
+          <ChatInput />
+        </template>
       </UDashboardSidebar>
 
       <UDashboardPanel id="video-grid" class="relative" :ui="{ body: 'p-0 sm:p-0' }">

@@ -119,7 +119,7 @@ const chatStatus = computed(() => {
     v-model="input"
     :error="undefined"
     variant="subtle"
-    class="[view-transition-name:chat-prompt] rounded-b-none z-10"
+    class="[view-transition-name:chat-prompt]"
     placeholder="Type a message... "
     @input="handleInput"
     @submit="handleSubmit"

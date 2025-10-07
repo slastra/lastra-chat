@@ -20,58 +20,50 @@ const connectionStatus = computed(() => {
 })
 
 const messagesContainer = ref<HTMLElement>()
-const showScrollButton = ref(false)
+const messagesContent = ref<HTMLElement>()
 
 // Filter out empty bot messages (during initial streaming)
 const visibleMessages = computed(() =>
   messages.value.filter((m: ChatMessage) => m.type !== 'bot' || m.content.trim().length > 0)
 )
 
-// Check if user is near bottom
-const checkScrollPosition = () => {
-  if (!messagesContainer.value) return
-  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
-  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-  showScrollButton.value = distanceFromBottom > 100
-}
-
 // Simple scroll to bottom function
 const scrollToBottom = () => {
   if (!messagesContainer.value) return
-  // Use setTimeout to ensure DOM is fully updated
-  setTimeout(() => {
+  requestAnimationFrame(() => {
     if (messagesContainer.value) {
       messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
     }
-  }, 100)
+  })
 }
 
-// Scroll on any message update (only if already at bottom)
-watch(visibleMessages, (newMessages, oldMessages) => {
-  if (!newMessages.length) return
+// Set up ResizeObserver to watch for content size changes
+let resizeObserver: ResizeObserver | null = null
 
-  // Check if a new message was added
-  if (!oldMessages || newMessages.length > oldMessages.length) {
-    // Only auto-scroll if user is already near the bottom
-    if (!showScrollButton.value) {
-      scrollToBottom()
-    }
-  }
+// Watch for new messages and trigger scroll
+watch(visibleMessages, () => {
+  nextTick(() => scrollToBottom())
 }, { deep: true })
 
-// Initial scroll on mount
 onMounted(() => {
-  scrollToBottom()
+  nextTick(() => {
+    // Initial scroll
+    scrollToBottom()
 
-  // Add scroll listener
-  if (messagesContainer.value) {
-    messagesContainer.value.addEventListener('scroll', checkScrollPosition)
-  }
+    // Set up ResizeObserver to automatically scroll when content resizes
+    if (messagesContent.value) {
+      resizeObserver = new ResizeObserver(() => {
+        scrollToBottom()
+      })
+
+      resizeObserver.observe(messagesContent.value)
+    }
+  })
 })
 
 onUnmounted(() => {
-  if (messagesContainer.value) {
-    messagesContainer.value.removeEventListener('scroll', checkScrollPosition)
+  if (resizeObserver) {
+    resizeObserver.disconnect()
   }
 })
 </script>
@@ -100,36 +92,22 @@ onUnmounted(() => {
     <div
       v-else
       ref="messagesContainer"
-      class="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth"
+      class="flex-1 overflow-y-auto p-4 scroll-smooth"
     >
-      <TransitionGroup
-        name="message"
-        tag="div"
-        class="space-y-4"
-      >
-        <ChatMessageItem
-          v-for="message in visibleMessages"
-          :key="message.id"
-          :message="message"
-        />
-      </TransitionGroup>
+      <div ref="messagesContent">
+        <TransitionGroup
+          name="message"
+          tag="div"
+          class="space-y-4"
+        >
+          <ChatMessageItem
+            v-for="message in visibleMessages"
+            :key="message.id"
+            :message="message"
+          />
+        </TransitionGroup>
+      </div>
     </div>
-
-    <!-- Scroll to bottom button -->
-    <Transition
-      name="fade"
-      mode="out-in"
-    >
-      <UButton
-        v-if="showScrollButton"
-        color="primary"
-        variant="solid"
-        icon="i-lucide-arrow-down"
-        size="md"
-        class="absolute bottom-16 right-4 shadow-lg z-10"
-        @click="scrollToBottom"
-      />
-    </Transition>
   </div>
 </template>
 
@@ -156,16 +134,5 @@ onUnmounted(() => {
 /* Smooth animation for messages being pushed down */
 .message-move {
   transition: transform 0.3s ease;
-}
-
-/* Fade animation for scroll button */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 </style>

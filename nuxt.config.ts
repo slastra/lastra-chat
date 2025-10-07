@@ -50,18 +50,6 @@ export default defineNuxtConfig({
 
   compatibilityDate: '2024-07-11',
 
-  fonts: {
-    families: [
-      { name: 'Inter', provider: 'google' },
-      { name: 'Geist Mono', provider: 'google' }
-    ],
-    defaults: {
-      weights: [400, 500, 600, 700],
-      styles: ['normal'],
-      subsets: ['latin']
-    }
-  },
-
   vite: {
     $server: {
       build: {
@@ -85,5 +73,17 @@ export default defineNuxtConfig({
 
   fileStorage: {
     mount: process.env.FILE_STORAGE_MOUNT || './uploads'
+  },
+
+  fonts: {
+    families: [
+      { name: 'Inter', provider: 'google' },
+      { name: 'Geist Mono', provider: 'google' }
+    ],
+    defaults: {
+      weights: [400, 500, 600, 700],
+      styles: ['normal'],
+      subsets: ['latin']
+    }
   }
 })
