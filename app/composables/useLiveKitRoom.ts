@@ -31,6 +31,7 @@ export interface UseLiveKitRoomOptions {
   participantMetadata?: Record<string, unknown>
   serverUrl?: string
   autoConnect?: boolean
+  adaptiveStream?: boolean // Allow disabling adaptive streaming for ingress
 }
 
 export interface LiveKitParticipant {
@@ -212,7 +213,7 @@ export function useLiveKitRoom(options: UseLiveKitRoomOptions): UseLiveKitRoomRe
   // Initialize room
   function initializeRoom(): Room {
     const newRoom = new Room({
-      adaptiveStream: true,
+      adaptiveStream: options.adaptiveStream ?? true,
       dynacast: true,
       disconnectOnPageLeave: false,
       publishDefaults: {

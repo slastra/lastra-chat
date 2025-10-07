@@ -7,7 +7,7 @@ const { loadBots } = useBots()
 const { clientId, userName } = useUser()
 
 const isReady = ref(false)
-const isDeviceSettingsOpen = ref(false)
+const isSettingsOpen = ref(false)
 const isSidebarCollapsed = ref(false)
 const toast = useToast()
 
@@ -18,7 +18,8 @@ const liveKitRoom = useLiveKitRoom({
   participantMetadata: {
     userId: clientId.value
   },
-  autoConnect: false
+  autoConnect: true,
+  adaptiveStream: true
 })
 
 // Initialize LiveKit chat
@@ -122,15 +123,14 @@ onMounted(async () => {
     playSound('userLeft')
   })
 
-  try {
-    // Connect to LiveKit room
-    await liveKitRoom.connect()
+  // autoConnect is enabled, so connection happens automatically
+  liveKitRoom.on('connected', () => {
     isReady.value = true
-  } catch (error) {
-    console.error('[Chat] Failed to connect to LiveKit:', error)
-    // Connection error handling - user will see disconnected status
+  })
+
+  liveKitRoom.on('disconnected', () => {
     isReady.value = false
-  }
+  })
 })
 
 onUnmounted(async () => {
@@ -191,7 +191,7 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
         :default-size="30"
         :max-size="50"
         mode="modal"
-        :ui="{ body: 'pb-0' }"
+        :ui="{ body: 'pb-0 overflow-hidden' }"
         class="bg-elevated/50"
       >
         <template #header>
@@ -249,10 +249,10 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
         </template>
 
         <div class="flex-1 min-h-0 w-full flex flex-col">
-          <div class="flex-1 overflow-hidden">
+          <div class="flex-1 min-h-0">
             <ChatMessageList />
           </div>
-          <div class="px-2 pt-2">
+          <div class="shrink-0 px-2 pt-2">
             <ChatInput />
           </div>
         </div>
@@ -295,12 +295,12 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
                   @click="handleScreenToggle"
                 />
 
-                <!-- Device Settings Button -->
+                <!-- Settings Button -->
                 <UButton
                   color="neutral"
                   variant="ghost"
                   icon="i-lucide-settings"
-                  @click="isDeviceSettingsOpen = true"
+                  @click="isSettingsOpen = true"
                 />
               </div>
             </template>
@@ -348,10 +348,10 @@ const handleDeviceChange = async (type: 'videoInput' | 'audioInput' | 'audioOutp
       </UCard>
     </div>
 
-    <!-- Device Settings Modal -->
-    <UModal v-model:open="isDeviceSettingsOpen" title="Device Settings">
+    <!-- Settings Modal -->
+    <UModal v-model:open="isSettingsOpen" title="Settings">
       <template #body>
-        <DeviceSettings
+        <Settings
           :supports-speaker-selection="liveKitRoom.supportsSpeakerSelection.value"
           :selected-camera="liveKitRoom.selectedCamera.value ?? undefined"
           :selected-microphone="liveKitRoom.selectedMicrophone.value ?? undefined"

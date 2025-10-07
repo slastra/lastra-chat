@@ -20,11 +20,20 @@ const connectionStatus = computed(() => {
 })
 
 const messagesContainer = ref<HTMLElement>()
+const showScrollButton = ref(false)
 
 // Filter out empty bot messages (during initial streaming)
 const visibleMessages = computed(() =>
   messages.value.filter((m: ChatMessage) => m.type !== 'bot' || m.content.trim().length > 0)
 )
+
+// Check if user is near bottom
+const checkScrollPosition = () => {
+  if (!messagesContainer.value) return
+  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+  showScrollButton.value = distanceFromBottom > 100
+}
 
 // Simple scroll to bottom function
 const scrollToBottom = () => {
@@ -37,24 +46,38 @@ const scrollToBottom = () => {
   }, 100)
 }
 
-// Scroll on any message update
+// Scroll on any message update (only if already at bottom)
 watch(visibleMessages, (newMessages, oldMessages) => {
   if (!newMessages.length) return
 
   // Check if a new message was added
   if (!oldMessages || newMessages.length > oldMessages.length) {
-    scrollToBottom()
+    // Only auto-scroll if user is already near the bottom
+    if (!showScrollButton.value) {
+      scrollToBottom()
+    }
   }
 }, { deep: true })
 
 // Initial scroll on mount
 onMounted(() => {
   scrollToBottom()
+
+  // Add scroll listener
+  if (messagesContainer.value) {
+    messagesContainer.value.addEventListener('scroll', checkScrollPosition)
+  }
+})
+
+onUnmounted(() => {
+  if (messagesContainer.value) {
+    messagesContainer.value.removeEventListener('scroll', checkScrollPosition)
+  }
 })
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col min-h-0">
+  <div class="flex-1 flex flex-col min-h-0 relative">
     <!-- Empty state -->
     <div
       v-if="visibleMessages.length === 0 && connectionStatus !== 'connecting'"
@@ -91,6 +114,22 @@ onMounted(() => {
         />
       </TransitionGroup>
     </div>
+
+    <!-- Scroll to bottom button -->
+    <Transition
+      name="fade"
+      mode="out-in"
+    >
+      <UButton
+        v-if="showScrollButton"
+        color="primary"
+        variant="solid"
+        icon="i-lucide-arrow-down"
+        size="md"
+        class="absolute bottom-16 right-4 shadow-lg z-10"
+        @click="scrollToBottom"
+      />
+    </Transition>
   </div>
 </template>
 
@@ -117,5 +156,16 @@ onMounted(() => {
 /* Smooth animation for messages being pushed down */
 .message-move {
   transition: transform 0.3s ease;
+}
+
+/* Fade animation for scroll button */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

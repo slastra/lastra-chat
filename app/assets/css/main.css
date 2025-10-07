@@ -2,20 +2,24 @@
 @import "@nuxt/ui";
 
 @theme static {
-  --font-sans: "Spectral", sans-serif;
-
-  /* Use Spectral SC for all headings */
-  --font-serif: "Spectral SC", serif;
-
-
+  --font-sans: "Inter", sans-serif;
+  --font-serif: "Inter", sans-serif;
+  --font-mono: "Geist Mono", monospace;
 }
 
 :root {
   --ui-container: var(--container-3xl);
 }
 
-/* Apply Spectral SC to all headings */
-h1, h2, h3, h4, h5, h6,
-.font-serif {
-  font-family: "Spectral SC", serif;
+/* Better font rendering */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Optimize Inter for better number alignment */
+.tabular-nums {
+  font-feature-settings: 'tnum';
+  font-variant-numeric: tabular-nums;
 }

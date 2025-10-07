@@ -89,14 +89,14 @@ const userAvatarUrl = useDiceBearAvatar(props.message.userName)
   >
     <div :class="['flex gap-3 max-w-[70%]', isOwnMessage ? 'flex-row-reverse' : 'flex-row']">
       <!-- Avatar -->
-      <div v-if="isAIMessage" class="mt-5">
+      <div v-if="isAIMessage" class="mt-5 shrink-0">
         <UAvatar
           :alt="message.userName"
           icon="i-lucide-bot"
           size="lg"
         />
       </div>
-      <div v-else class="mt-5">
+      <div v-else class="mt-5 shrink-0">
         <img
           :src="userAvatarUrl"
           :alt="message.userName"

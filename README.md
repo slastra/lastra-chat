@@ -14,6 +14,7 @@ Real-time chat application built with Nuxt 4 and LiveKit, featuring WebRTC-based
 - **Adaptive Streaming**: Dynamic video quality based on network conditions
 - **Click-to-Download**: File attachments with original filename preservation
 - **GridStack Video Layout**: Draggable, resizable video tiles with persistent positions
+- **WHIP Ingress**: Stream from OBS Studio directly to LiveKit rooms via WHIP protocol
 
 ### AI Integration
 - **Multiple AI Bots**: Configurable bots powered by Google Gemini
@@ -32,16 +33,20 @@ Real-time chat application built with Nuxt 4 and LiveKit, featuring WebRTC-based
 - **Rich Media Display**: Inline preview for images, video, and audio files
 - **Fullscreen Video**: Immersive fullscreen viewer with overlayed controls for video streams
 - **Video Quality Stats**: Real-time statistics overlay showing resolution, framerate, and bitrate
+- **Scroll to Bottom**: Auto-appearing button when scrolling up, smart auto-scroll behavior
+- **Modern Typography**: Inter font family for clean, legible UI text; Geist Mono for code
 
 ## Technology Stack
 
 - **Framework**: Nuxt 4.1.2, Vue 3.5.21, TypeScript 5.9.2
-- **WebRTC**: LiveKit Client 2.15.7, LiveKit Server SDK 2.13.3 (SFU architecture)
+- **WebRTC**: LiveKit Client 2.15.8, LiveKit Server SDK 2.14.0 (SFU architecture)
 - **UI Library**: Nuxt UI v4.0.0 (stable)
+- **Typography**: Nuxt Fonts with Inter and Geist Mono (Google Fonts)
 - **Avatars**: DiceBear Core 9.2.4 with Identicon style
-- **AI Provider**: Google Generative AI 1.20.0 (Gemini 2.0)
+- **AI Provider**: Google Generative AI 1.22.0 (Gemini 2.5)
 - **Real-time**: LiveKit data channels for messaging
 - **File Storage**: nuxt-file-storage 0.3.0 with organized date-based structure
+- **Video Layout**: GridStack 12.3.3 for draggable video tiles
 - **Notifications**: ntfy.sh integration
 - **Package Manager**: pnpm 10.15.1
 
@@ -51,6 +56,7 @@ Real-time chat application built with Nuxt 4 and LiveKit, featuring WebRTC-based
 - Node.js 18+
 - pnpm 10.15.1
 - LiveKit Server (for WebRTC functionality)
+- LiveKit Ingress (optional, for OBS streaming via WHIP)
 
 ### Installation
 
@@ -80,7 +86,12 @@ FILE_STORAGE_MOUNT=./uploads             # File storage directory (optional, def
 livekit-server --dev
 ```
 
-2. Start Nuxt development server:
+2. (Optional) Start LiveKit Ingress for OBS streaming:
+```bash
+livekit-ingress --config /path/to/ingress.yaml
+```
+
+3. Start Nuxt development server:
 ```bash
 pnpm run dev
 ```
@@ -158,6 +169,7 @@ pnpm run lint        # ESLint with auto-fix
 
 ### LiveKit Integration
 - `POST /api/livekit-token` - Generate access tokens
+- `POST /api/whip-ingress` - Create/retrieve WHIP ingress for OBS streaming
 - `POST /api/chat` - Process AI bot messages
 
 ### File Management
@@ -226,7 +238,15 @@ The application uses DiceBear to generate unique identicon-style avatars:
 - `/server/constants/` - Shared constants like file type definitions
 - `/server/utils/` - Server utilities including LiveKit client singleton
 
-### Recent Optimizations
+### Recent Updates
+
+**October 2025:**
+- **WHIP Ingress**: OBS streaming support via WHIP protocol with bypass mode
+- **Typography**: Switched to Inter + Geist Mono for modern, clean UI
+- **Chat UX**: Scroll-to-bottom button, fixed avatar squishing, improved layout
+- **AUR Package**: Published livekit-ingress to Arch User Repository
+
+**September 2025:**
 - **Code Reduction**: 755+ lines of dead code removed, 16 files deleted
 - **Shared Utilities**: Centralized RoomServiceClient, file type definitions
 - **Legacy Removal**: Eliminated bridge layer and defunct slash command system
